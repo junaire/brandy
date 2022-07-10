@@ -1,0 +1,69 @@
+{
+  "functions": [
+    {
+      "instrs": [
+        {
+          "dest": "v0",
+          "op": "const",
+          "type": "float",
+          "value": 1.1
+        },
+        {
+          "dest": "v1",
+          "op": "const",
+          "type": "float",
+          "value": 0.02
+        },
+        {
+          "dest": "v2",
+          "op": "const",
+          "type": "float",
+          "value": 0.3
+        },
+        {
+          "args": [
+            "v0",
+            "v1"
+          ],
+          "dest": "v3",
+          "op": "fadd",
+          "type": "float"
+        },
+        {
+          "args": [
+            "v2",
+            "v2"
+          ],
+          "dest": "v4",
+          "op": "fmul",
+          "type": "float"
+        },
+        {
+          "dest": "v5",
+          "op": "const",
+          "type": "float",
+          "value": 1.0
+        },
+        {
+          "dest": "v6",
+          "op": "const",
+          "type": "float",
+          "value": 1000000.0
+        },
+        {
+          "dest": "v8",
+          "op": "const",
+          "type": "float",
+          "value": -1000000.0
+        },
+        {
+          "dest": "v9",
+          "op": "const",
+          "type": "float",
+          "value": 110000000000.0
+        }
+      ],
+      "name": "main"
+    }
+  ]
+}
