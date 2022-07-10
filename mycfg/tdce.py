@@ -41,7 +41,23 @@ def dead_code_elimination(basic_block):
         if "dest" in instr and instr["dest"] not in used:
             basic_block.remove(instr)
 
-def run_dead_code_elimination(basic_block):
+
+def remove_reassign_before_use(basic_block):
+    used = {}
+    for instr in basic_block:
+        print(used)
+        if "dest" in instr:
+            if instr["dest"] in used.keys():
+                # reassign occurs, remove the last instruction
+                basic_block.remove(used[instr["dest"]])
+            used[instr["dest"]] = instr
+        if "args" in instr:
+            # we have used an instruction, remove it from the used set
+            for arg in instr["args"]:
+                del used[arg]
+
+
+def run_dead_code_elimination(basic_block, func):
     last = []
     while True:
         dead_code_elimination(basic_block)
@@ -49,9 +65,10 @@ def run_dead_code_elimination(basic_block):
             return
         last = basic_block
 
+
 if __name__ == "__main__":
     program = json.load(sys.stdin)
-    function = program["functions"][0] # we know there's only one function named main
+    function = program["functions"][0]  # we know there's only one function named main
     basic_block = function["instrs"]
     run_dead_code_elimination(basic_block)
     function["instrs"] = basic_block
