@@ -44,25 +44,34 @@ def dead_code_elimination(basic_block):
 
 def remove_reassign_before_use(basic_block):
     used = {}
+    removed = []
     for instr in basic_block:
-        print(used)
-        if "dest" in instr:
-            if instr["dest"] in used.keys():
-                # reassign occurs, remove the last instruction
-                basic_block.remove(used[instr["dest"]])
-            used[instr["dest"]] = instr
-        if "args" in instr:
-            # we have used an instruction, remove it from the used set
-            for arg in instr["args"]:
-                del used[arg]
+         if "dest" in instr:
+             if instr["dest"] in used.keys():
+                 # reassign occurs, remove the last instruction
+                 removed.append(used[instr["dest"]])
+             used[instr["dest"]] = instr
+         if "args" in instr:
+             # we have used an instruction, remove it from the used set
+             for arg in instr["args"]:
+                 del used[arg]
+    for r in removed:
+        basic_block.remove(r)
 
 
-def run_dead_code_elimination(basic_block, func):
+def run_dead_code_elimination(basic_block):
     last = []
     while True:
         dead_code_elimination(basic_block)
         if last == basic_block:
-            return
+            break
+        last = basic_block
+
+    last = []
+    while True:
+        remove_reassign_before_use(basic_block)
+        if last == basic_block:
+            break
         last = basic_block
 
 
