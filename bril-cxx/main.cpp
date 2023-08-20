@@ -36,11 +36,15 @@ static std::optional<Instruction> getTerminator(const BasicBlock &bb) {
 
 static void dumpBasicBlock(const BasicBlock &bb) {
   std::cout << bb.name;
-  std::cout << " [";
-  for (const Instruction &instr : bb.data) {
-    std::cout << instr << ", ";
+  if (bb.name == "Entry" || bb.name == "Exit") {
+    std::cout << "\n";
+  } else {
+    std::cout << " [";
+    for (const Instruction &instr : bb.data) {
+      std::cout << instr << ", ";
+    }
+    std::cout << "]\n";
   }
-  std::cout << "]\n";
 }
 
 static void dumpFunction(const Function &function) {
@@ -126,7 +130,7 @@ Function buildFunction(const nl::json &function) {
   if (!bb.data.empty()) program.basic_blocks.push_back(bb);
 
   for (BasicBlock &bb : program.basic_blocks) {
-    assert(!bb.data.empty() && "BasicBlock is empty");
+    assert(bb.isValid() && "BasicBlock is invalid");
     // dumpBasicBlock(bb);
     if (bb.data[0].contains("label")) {
       std::string name = bb.data[0]["label"];
@@ -153,7 +157,7 @@ CFG buildCFG(Function &function) {
     Instruction &instr = it->data.back();
 
     std::string op = instr["op"].template get<std::string>();
-    std::cout << "name: " << bb_name << " op: " << op << "\n";
+    // std::cout << "name: " << bb_name << " op: " << op << "\n";
 
     if (op == "br" || op == "jmp") {
       for (const nl::json &dst : instr["labels"]) {
@@ -173,8 +177,36 @@ CFG buildCFG(Function &function) {
     }
   }
 
+  std::vector<std::string> entry_succs;
+  std::vector<std::string> exit_preds;
+
+  for (const BasicBlock &bb : cfg.function.basic_blocks) {
+    if (cfg.predecessors[bb.name].empty()) {
+      entry_succs.push_back(bb.name);
+    }
+    if (cfg.successors[bb.name].empty()) {
+      exit_preds.push_back(bb.name);
+    }
+  }
+
+  cfg.function.basic_blocks.insert(cfg.function.basic_blocks.begin(),
+                                   BasicBlock{.name = "Entry"});
+  cfg.function.basic_blocks.push_back(BasicBlock{.name = "Exit"});
+
+  for (const std::string &name : entry_succs) {
+    cfg.predecessors[name].push_back("Entry");
+  }
+  cfg.successors["Entry"] = std::move(entry_succs);
+
+  for (const std::string &name : exit_preds) {
+    cfg.successors[name].push_back("Exit");
+  }
+  cfg.predecessors["Exit"] = std::move(exit_preds);
+
   return cfg;
 }
+
+DomNode buildDominatorTree(const CFG &cfg) { return {}; }
 
 int main(int argc, char **argv) {
   nl::json ir;
