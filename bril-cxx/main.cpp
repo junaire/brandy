@@ -137,7 +137,7 @@ Function buildFunction(const nl::json &function) {
 
 CFG buildCFG(Function &function) {
   CFG cfg = {.name = function.name};
-  // std::cout << cfg.name << "\n";
+  std::cout << cfg.name << "\n";
 
   for (BasicBlock &bb : function.basic_blocks) {
     assert(!bb.empty() && "BasicBlock is empty");
@@ -153,15 +153,32 @@ CFG buildCFG(Function &function) {
       cfg.basic_blocks[name] = std::move(bb);
     }
   }
-  for (const auto &[name, bb] : cfg.basic_blocks) {
-    if (std::optional<Instruction> terminator = getTerminator(bb)) {
-      for (const nl::json &dst : terminator.value()["labels"]) {
+  for (auto it = cfg.basic_blocks.begin(), end = cfg.basic_blocks.end();
+       it != end; ++it) {
+    std::string bb_name = it->first;
+    Instruction &instr = it->second.back();
+
+    std::string op = instr["op"].template get<std::string>();
+    std::cout << "name: " << bb_name << " op: " << op << "\n";
+
+    if (op == "br" || op == "jmp") {
+      for (const nl::json &dst : instr["labels"]) {
         std::string dst_name = dst.template get<std::string>();
-        cfg.successors[name].push_back(dst_name);
-        cfg.predecessors[dst_name].push_back(name);
+        cfg.successors[bb_name].push_back(dst_name);
+        cfg.predecessors[dst_name].push_back(bb_name);
       }
+    } else if (op == "ret" || std::next(it) == end) {
+      // No successors.
+      std::cout << "no successors?\n";
+    } else {
+      // Fall through.
+      std::string next_bb = std::next(it)->first;
+      std::cout << "Fall through " << next_bb << "\n";
+      cfg.successors[bb_name].push_back(next_bb);
+      cfg.predecessors[next_bb].push_back(bb_name);
     }
   }
+
   return cfg;
 }
 

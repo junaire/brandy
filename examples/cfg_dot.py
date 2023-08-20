@@ -32,13 +32,13 @@ def cfg_dot(bril, verbose):
                     r'\l'.join(briltxt.instr_to_string(i) for i in block),
                 ))
             else:
-                print('  {};'.format(name))
+                print('  "{}";'.format(name))
 
         # Add the control-flow edges.
         for i, (name, block) in enumerate(blocks.items()):
             succ = successors(block[-1])
             for label in succ:
-                print('  {} -> {};'.format(name, label))
+                print('  "{}" -> "{}";'.format(name, label))
 
         print('}')
 
