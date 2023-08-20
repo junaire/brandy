@@ -11,7 +11,10 @@ namespace nl = nlohmann;
 
 using Instruction = nl::json;
 
-using BasicBlock = std::deque<Instruction>;
+struct BasicBlock {
+  std::string name;
+  std::deque<Instruction> data;
+};
 
 struct Function {
   std::string name;
@@ -20,8 +23,7 @@ struct Function {
 };
 
 struct CFG {
-  std::string name;
-  std::map<std::string, BasicBlock> basic_blocks;
+  Function function;
   std::map<std::string, std::vector<std::string>> predecessors;
   std::map<std::string, std::vector<std::string>> successors;
 };

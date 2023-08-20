@@ -28,15 +28,16 @@ static bool isTerminator(const Instruction &instr) {
 }
 
 static std::optional<Instruction> getTerminator(const BasicBlock &bb) {
-  assert(!bb.empty());
-  Instruction terminator = bb.back();
+  assert(!bb.data.empty());
+  Instruction terminator = bb.data.back();
   if (isTerminator(terminator)) return terminator;
   return std::nullopt;
 }
 
 static void dumpBasicBlock(const BasicBlock &bb) {
-  std::cout << "[";
-  for (const Instruction &instr : bb) {
+  std::cout << bb.name;
+  std::cout << " [";
+  for (const Instruction &instr : bb.data) {
     std::cout << instr << ", ";
   }
   std::cout << "]\n";
@@ -45,21 +46,13 @@ static void dumpBasicBlock(const BasicBlock &bb) {
 static void dumpFunction(const Function &function) {
   std::cout << function.name << ":\n";
   for (const BasicBlock &bb : function.basic_blocks) {
-    for (const Instruction &instr : bb) {
-      std::cout << instr << "\n";
-    }
-    std::cout << "\n";
+    dumpBasicBlock(bb);
   }
 }
 
 static void dumpCFG(const CFG &cfg) {
-  std::cout << cfg.name << ":\n";
-  std::cout << "BasicBlocks:\n";
-  for (const auto &[name, bb] : cfg.basic_blocks) {
-    std::cout << name << ":\n";
-    for (const Instruction &instr : bb) std::cout << instr << "\n";
-    std::cout << "\n";
-  }
+  dumpFunction(cfg.function);
+  std::cout << "\n";
   if (!cfg.successors.empty()) {
     std::cout << "Successors:\n";
     for (const auto &[name, succs] : cfg.successors) {
@@ -85,11 +78,11 @@ static void dumpCFG(const CFG &cfg) {
 }
 
 static void dumpCFGToDot(const CFG &cfg) {
-  std::string file = cfg.name + ".dot";
+  std::string file = cfg.function.name + ".dot";
   std::ofstream f(file);
-  f << "digraph " << cfg.name << " {\n";
+  f << "digraph " << cfg.function.name << " {\n";
   f << "node [shape=box, style=filled]\n";
-  for (const auto &[name, bb] : cfg.basic_blocks) {
+  for (const auto &[name, bb] : cfg.function.basic_blocks) {
     f << "\"" << name << "\"\n";
   }
   for (const auto &[name, succs] : cfg.successors) {
@@ -117,46 +110,47 @@ Function buildFunction(const nl::json &function) {
   for (const Instruction &instr : function["instrs"]) {
     // std::cout << instr << "\n";
     if (isInstruction(instr)) {
-      bb.push_back(instr);
+      bb.data.push_back(instr);
       if (isTerminator(instr)) {
         program.basic_blocks.push_back(bb);
-        bb.clear();
+        bb.data.clear();
       }
     } else {
-      if (!bb.empty()) {
+      if (!bb.data.empty()) {
         program.basic_blocks.push_back(bb);
-        bb.clear();
+        bb.data.clear();
       }
-      bb.push_back(instr);
+      bb.data.push_back(instr);
     }
   }
-  if (!bb.empty()) program.basic_blocks.push_back(bb);
+  if (!bb.data.empty()) program.basic_blocks.push_back(bb);
+
+  for (BasicBlock &bb : program.basic_blocks) {
+    assert(!bb.data.empty() && "BasicBlock is empty");
+    // dumpBasicBlock(bb);
+    if (bb.data[0].contains("label")) {
+      std::string name = bb.data[0]["label"];
+      // std::cout << "have a label: " << name << "\n";
+      bb.data.pop_front();
+      bb.name = name;
+    } else {
+      std::string name = createBBName();
+      // std::cout << "no label: " << name << "\n";
+      bb.name = name;
+    }
+  }
 
   return program;
 }
 
 CFG buildCFG(Function &function) {
-  CFG cfg = {.name = function.name};
-  std::cout << cfg.name << "\n";
+  CFG cfg = {.function = function};
 
-  for (BasicBlock &bb : function.basic_blocks) {
-    assert(!bb.empty() && "BasicBlock is empty");
-    // dumpBasicBlock(bb);
-    if (bb[0].contains("label")) {
-      std::string name = bb[0]["label"];
-      // std::cout << "have a label: " << name << "\n";
-      bb.pop_front();
-      cfg.basic_blocks[name] = std::move(bb);
-    } else {
-      std::string name = createBBName();
-      // std::cout << "no label: " << name << "\n";
-      cfg.basic_blocks[name] = std::move(bb);
-    }
-  }
-  for (auto it = cfg.basic_blocks.begin(), end = cfg.basic_blocks.end();
+  for (auto it = cfg.function.basic_blocks.begin(),
+            end = cfg.function.basic_blocks.end();
        it != end; ++it) {
-    std::string bb_name = it->first;
-    Instruction &instr = it->second.back();
+    std::string bb_name = it->name;
+    Instruction &instr = it->data.back();
 
     std::string op = instr["op"].template get<std::string>();
     std::cout << "name: " << bb_name << " op: " << op << "\n";
@@ -169,11 +163,11 @@ CFG buildCFG(Function &function) {
       }
     } else if (op == "ret" || std::next(it) == end) {
       // No successors.
-      std::cout << "no successors?\n";
+      // std::cout << "no successors\n";
     } else {
       // Fall through.
-      std::string next_bb = std::next(it)->first;
-      std::cout << "Fall through " << next_bb << "\n";
+      std::string next_bb = std::next(it)->name;
+      // std::cout << "Fall through " << next_bb << "\n";
       cfg.successors[bb_name].push_back(next_bb);
       cfg.predecessors[next_bb].push_back(bb_name);
     }
