@@ -40,9 +40,6 @@ Function buildFunction(const nl::json &function);
 
 CFG buildCFG(Function &function);
 
-struct DomNode {
-  std::string name;
-  std::vector<std::string> children;
-};
+using DomRelation = std::map<std::string, std::vector<std::string>>;
 
-DomNode buildDominatorTree(const CFG &cfg);
+DomRelation computeDominators(CFG &cfg);

@@ -1,6 +1,9 @@
+#include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <optional>
+#include <set>
 #include <string_view>
 
 #include "compiler.h"
@@ -206,7 +209,89 @@ CFG buildCFG(Function &function) {
   return cfg;
 }
 
-DomNode buildDominatorTree(const CFG &cfg) { return {}; }
+static void build(CFG &cfg, std::vector<std::string> &postorder,
+                  std::set<std::string> &visited, const std::string &root) {
+  if (visited.contains(root)) return;
+  visited.insert(root);
+
+  for (const std::string &succ : cfg.successors[root]) {
+    build(cfg, postorder, visited, succ);
+  }
+  if (root != "Exit") postorder.push_back(root);
+};
+
+std::vector<std::string> buildPostOrder(CFG &cfg) {
+  std::vector<std::string> postorder;
+  std::set<std::string> visited;
+  build(cfg, postorder, visited, "Entry");
+  return postorder;
+}
+
+DomRelation computeDominators(CFG &cfg) {
+  DomRelation dom;
+  std::vector<std::string> postorder = buildPostOrder(cfg);
+  std::reverse(postorder.begin(), postorder.end());
+
+  assert(postorder[0] == "Entry");
+  dom["Entry"] = {"Entry"};
+
+  for (const BasicBlock &bb : cfg.function.basic_blocks) {
+    if (bb.isEntry() || bb.isExit()) continue;
+    dom[bb.name] = postorder;
+  }
+
+  postorder.erase(postorder.begin());
+
+  // for (const std::string &node : postorder) {
+  //   std::cout << node << "\n";
+  // }
+
+  auto intersect = [](std::vector<std::string> new_dom,
+                      std::vector<std::string> dom) {
+    std::vector<std::string> intersect;
+    for (const std::string &node : dom) {
+      if (std::find(new_dom.begin(), new_dom.end(), node) != new_dom.end()) {
+        intersect.push_back(node);
+      }
+    }
+    return intersect;
+  };
+
+  while (true) {
+    bool changed = false;
+    for (const std::string &node : postorder) {
+      std::vector<std::string> new_dom;
+
+      // intersect preds' dom.
+      std::vector<std::string> preds = cfg.predecessors[node];
+      assert(!preds.empty() && "preds empty");
+      new_dom = dom[preds[0]];
+      for (int i = 1; i < preds.size(); ++i) {
+        new_dom = intersect(new_dom, dom[preds[i]]);
+      }
+      // union node itself
+      new_dom.push_back(node);
+
+      // if new_dom != dom
+      if (new_dom != dom[node]) {
+        dom[node] = new_dom;
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  return dom;
+}
+
+void dumpDom(const DomRelation &dom) {
+  for (const auto &[name, doms] : dom) {
+    std::cout << name << ": \n[";
+    for (const std::string &d : doms) {
+      std::cout << d << ", ";
+    }
+    std::cout << "]\n";
+  }
+}
 
 int main(int argc, char **argv) {
   nl::json ir;
@@ -223,5 +308,7 @@ int main(int argc, char **argv) {
     CFG cfg = buildCFG(program);
     // dumpCFG(cfg);
     dumpCFGToDot(cfg);
+    DomRelation dom = computeDominators(cfg);
+    dumpDom(dom);
   }
 }
