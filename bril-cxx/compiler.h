@@ -2,6 +2,7 @@
 
 #include <deque>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -42,4 +43,10 @@ CFG buildCFG(Function &function);
 
 using DomRelation = std::map<std::string, std::vector<std::string>>;
 
-DomRelation computeDominators(CFG &cfg);
+struct DomInfo {
+  DomRelation dom;
+  std::map<std::string, std::string> idom;
+  std::map<std::string, std::set<std::string>> df;
+};
+
+DomInfo computeDomInfo(CFG &cfg);

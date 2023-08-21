@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -192,19 +193,19 @@ CFG buildCFG(Function &function) {
     }
   }
 
-  cfg.function.basic_blocks.insert(cfg.function.basic_blocks.begin(),
-                                   BasicBlock{.name = "Entry"});
-  cfg.function.basic_blocks.push_back(BasicBlock{.name = "Exit"});
+  // cfg.function.basic_blocks.insert(cfg.function.basic_blocks.begin(),
+  //                                  BasicBlock{.name = "Entry"});
+  // cfg.function.basic_blocks.push_back(BasicBlock{.name = "Exit"});
 
-  for (const std::string &name : entry_succs) {
-    cfg.predecessors[name].push_back("Entry");
-  }
-  cfg.successors["Entry"] = std::move(entry_succs);
+  // for (const std::string &name : entry_succs) {
+  //   cfg.predecessors[name].push_back("Entry");
+  // }
+  // cfg.successors["Entry"] = std::move(entry_succs);
 
-  for (const std::string &name : exit_preds) {
-    cfg.successors[name].push_back("Exit");
-  }
-  cfg.predecessors["Exit"] = std::move(exit_preds);
+  // for (const std::string &name : exit_preds) {
+  //   cfg.successors[name].push_back("Exit");
+  // }
+  // cfg.predecessors["Exit"] = std::move(exit_preds);
 
   return cfg;
 }
@@ -220,27 +221,31 @@ static void build(CFG &cfg, std::vector<std::string> &postorder,
   if (root != "Exit") postorder.push_back(root);
 };
 
-std::vector<std::string> buildPostOrder(CFG &cfg) {
+static std::vector<std::string> buildPostOrder(CFG &cfg) {
   std::vector<std::string> postorder;
   std::set<std::string> visited;
-  build(cfg, postorder, visited, "Entry");
+  build(cfg, postorder, visited, cfg.function.basic_blocks[0].name);
   return postorder;
 }
 
-DomRelation computeDominators(CFG &cfg) {
-  DomRelation dom;
+static std::vector<std::string> buildCFGVisitNode(CFG &cfg) {
   std::vector<std::string> postorder = buildPostOrder(cfg);
   std::reverse(postorder.begin(), postorder.end());
+  // postorder.erase(postorder.begin());
+  return postorder;
+}
 
-  assert(postorder[0] == "Entry");
-  dom["Entry"] = {"Entry"};
+static DomRelation computeDominators(CFG &cfg) {
+  DomRelation dom;
+
+  std::vector<std::string> postorder = buildCFGVisitNode(cfg);
+
+  // dom["Entry"] = {"Entry"};
 
   for (const BasicBlock &bb : cfg.function.basic_blocks) {
     if (bb.isEntry() || bb.isExit()) continue;
     dom[bb.name] = postorder;
   }
-
-  postorder.erase(postorder.begin());
 
   // for (const std::string &node : postorder) {
   //   std::cout << node << "\n";
@@ -264,10 +269,11 @@ DomRelation computeDominators(CFG &cfg) {
 
       // intersect preds' dom.
       std::vector<std::string> preds = cfg.predecessors[node];
-      assert(!preds.empty() && "preds empty");
-      new_dom = dom[preds[0]];
-      for (int i = 1; i < preds.size(); ++i) {
-        new_dom = intersect(new_dom, dom[preds[i]]);
+      if (!preds.empty()) {
+        new_dom = dom[preds[0]];
+        for (int i = 1; i < preds.size(); ++i) {
+          new_dom = intersect(new_dom, dom[preds[i]]);
+        }
       }
       // union node itself
       new_dom.push_back(node);
@@ -283,14 +289,141 @@ DomRelation computeDominators(CFG &cfg) {
   return dom;
 }
 
-void dumpDom(const DomRelation &dom) {
-  for (const auto &[name, doms] : dom) {
-    std::cout << name << ": \n[";
-    for (const std::string &d : doms) {
-      std::cout << d << ", ";
+static std::vector<std::string> symmetric_difference(
+    const std::set<std::string> &all_dominators,
+    const std::vector<std::string> &idom_cand) {
+  std::vector<std::string> result = idom_cand;
+  for (const std::string &node : all_dominators) {
+    if (auto it = std::find(result.begin(), result.end(), node);
+        it != result.end()) {
+      result.erase(it);
     }
+  }
+  return result;
+}
+
+static void computeIntermidiateDominators(DomInfo &dom_info, CFG &cfg) {
+  // strip itself, now its sdom.
+  for (auto [node, idom_cand] : dom_info.dom) {
+    idom_cand.erase(std::remove(idom_cand.begin(), idom_cand.end(), node),
+                    idom_cand.end());
+    if (idom_cand.size() == 1) {
+      std::string idom = idom_cand.back();
+      idom_cand.pop_back();
+      dom_info.idom[node] = idom;
+      continue;
+    }
+    std::set<std::string> all_dominators;
+    for (const std::string &node : idom_cand) {
+      if (all_dominators.contains(node)) {
+        continue;
+      }
+      // all_dominators |= d.dominators - {d}
+      std::set<std::string> node_dom(dom_info.dom[node].begin(),
+                                     dom_info.dom[node].end());
+      auto it = std::find(node_dom.begin(), node_dom.end(), node);
+      assert(it != node_dom.end());
+      node_dom.erase(it);
+      all_dominators.merge(node_dom);
+    }
+    // idom_candidates = all_dominators.symmetric_difference(idom_candidates)
+    idom_cand = symmetric_difference(all_dominators, idom_cand);
+    assert(idom_cand.size() <= 1);
+    if (!idom_cand.empty()) {
+      std::string idom = idom_cand.back();
+      dom_info.idom[node] = idom;
+      idom_cand.pop_back();
+    }
+  }
+}
+
+// static void computeDomFrontier(DomInfo &dom_info, CFG &cfg) {
+//   std::vector<std::string> postorder = buildCFGVisitNode(cfg);
+//   std::string runner;
+//
+//   for (const std::string &node : postorder) {
+//     if (cfg.predecessors[node].size() >= 2) {
+//       for (const std::string &father : cfg.predecessors[node]) {
+//         runner = father;
+//         if (dom_info.idom[node] == father) {
+//           dom_info.df[runner].insert(node);
+//         }
+//         while (dom_info.idom[node] != father) {
+//           dom_info.df[runner].insert(node);
+//           if (!dom_info.idom[runner].empty()) {
+//             std::cout << runner << "\n";
+//             abort();
+//           }
+//           runner = dom_info.idom[runner];
+//         }
+//       }
+//     }
+//   }
+// }
+
+static void computeDomFrontier(DomInfo &dom_info, CFG &cfg) {
+  auto invert = [](const DomRelation &dom) {
+    DomRelation out;
+    for (const auto &[name, succs] : dom) {
+      for (const std::string &succ : succs) {
+        out[succ].push_back(name);
+      }
+    }
+    return out;
+  };
+
+  DomRelation tree = invert(dom_info.dom);
+  for (const auto &block : dom_info.dom) {
+    // std::cout << block.first << "\n";
+    std::set<std::string> dominated_succs;
+    for (const auto &dominated : tree[block.first]) {
+      for (const std::string &succ : cfg.successors[dominated]) {
+        dominated_succs.insert(succ);
+      }
+    }
+    for (const std::string &b : dominated_succs) {
+      const auto &node_all_succs = tree[block.first];
+      bool not_found = std::find(node_all_succs.begin(), node_all_succs.end(),
+                                 b) == node_all_succs.end();
+      bool equal = b == block.first;
+      if (not_found || equal) {
+        dom_info.df[block.first].insert(b);
+      }
+    }
+  }
+}
+
+static void dumpDom(const DomInfo &dom_info) {
+  auto print = [](const auto &dom) {
+    for (const auto &[name, doms] : dom) {
+      std::cout << name << ": [";
+      for (const std::string &d : doms) {
+        std::cout << d << ", ";
+      }
+      std::cout << "]\n";
+    }
+  };
+
+  std::cout << "dom:\n";
+  print(dom_info.dom);
+
+  std::cout << "idom:\n";
+  for (const auto &[name, idom] : dom_info.idom) {
+    std::cout << name << ": [";
+    if (!idom.empty()) std::cout << idom;
     std::cout << "]\n";
   }
+
+  std::cout << "dominator frontier:\n";
+  print(dom_info.df);
+}
+
+DomInfo computeDomInfo(CFG &cfg) {
+  DomInfo dom_info;
+  dom_info.dom = computeDominators(cfg);
+  computeIntermidiateDominators(dom_info, cfg);
+  computeDomFrontier(dom_info, cfg);
+  return dom_info;
 }
 
 int main(int argc, char **argv) {
@@ -308,7 +441,7 @@ int main(int argc, char **argv) {
     CFG cfg = buildCFG(program);
     // dumpCFG(cfg);
     dumpCFGToDot(cfg);
-    DomRelation dom = computeDominators(cfg);
+    DomInfo dom = computeDomInfo(cfg);
     dumpDom(dom);
   }
 }
