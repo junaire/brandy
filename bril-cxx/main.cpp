@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cassert>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -6,6 +7,7 @@
 #include <optional>
 #include <set>
 #include <string_view>
+#include <utility>
 
 #include "compiler.h"
 
@@ -113,6 +115,12 @@ Function buildFunction(const nl::json &function) {
   Function program;
   program.name = function["name"];
   // std::cout << program.name << "\n";
+
+  if (function.contains("args")) {
+    for (const nl::json &arg : function["args"]) {
+      program.args.insert(arg.template get<std::string>());
+    }
+  }
 
   BasicBlock bb;
   for (const Instruction &instr : function["instrs"]) {
@@ -303,8 +311,8 @@ static std::vector<std::string> symmetric_difference(
 }
 
 static void computeIntermidiateDominators(DomInfo &dom_info, CFG &cfg) {
-  // strip itself, now its sdom.
   for (auto [node, idom_cand] : dom_info.dom) {
+    // strip itself, now its sdom.
     idom_cand.erase(std::remove(idom_cand.begin(), idom_cand.end(), node),
                     idom_cand.end());
     if (idom_cand.size() == 1) {
@@ -361,17 +369,17 @@ static void computeIntermidiateDominators(DomInfo &dom_info, CFG &cfg) {
 //   }
 // }
 
-static void computeDomFrontier(DomInfo &dom_info, CFG &cfg) {
-  auto invert = [](const DomRelation &dom) {
-    DomRelation out;
-    for (const auto &[name, succs] : dom) {
-      for (const std::string &succ : succs) {
-        out[succ].push_back(name);
-      }
+static auto invert(const DomRelation &dom) {
+  DomRelation out;
+  for (const auto &[name, succs] : dom) {
+    for (const std::string &succ : succs) {
+      out[succ].push_back(name);
     }
-    return out;
-  };
+  }
+  return out;
+};
 
+static void computeDomFrontier(DomInfo &dom_info, CFG &cfg) {
   DomRelation tree = invert(dom_info.dom);
   for (const auto &block : dom_info.dom) {
     // std::cout << block.first << "\n";
@@ -418,13 +426,171 @@ static void dumpDom(const DomInfo &dom_info) {
   print(dom_info.df);
 }
 
+static void computeDomTree(CFG &cfg, DomInfo &dom_info) {
+  DomRelation strict = invert(dom_info.dom);
+  for (auto &[a, b] : strict) {
+    b.erase(std::remove(b.begin(), b.end(), a), b.end());
+  }
+  DomRelation strict_2x;
+  for (auto &[a, bs] : strict) {
+    std::set<std::string> item;
+    for (auto &b : bs) {
+      for (const std::string &d : strict[b]) {
+        item.insert(d);
+      }
+    }
+    strict_2x[a] = std::vector<std::string>(item.begin(), item.end());
+  }
+
+  for (auto &[a, bs] : strict) {
+    for (auto &b : bs) {
+      auto &strict_2x_a = strict_2x[a];
+      if (std::find(strict_2x_a.begin(), strict_2x_a.end(), b) ==
+          strict_2x_a.end()) {
+        dom_info.dom_tree[a].insert(b);
+      }
+    }
+  }
+}
+
 DomInfo computeDomInfo(CFG &cfg) {
   DomInfo dom_info;
   dom_info.dom = computeDominators(cfg);
   computeIntermidiateDominators(dom_info, cfg);
   computeDomFrontier(dom_info, cfg);
+  computeDomTree(cfg, dom_info);
   return dom_info;
 }
+
+static std::map<std::string, std::set<std::string>> getDefBlockMap(
+    Function &function) {
+  std::map<std::string, std::set<std::string>> out;
+  for (BasicBlock &bb : function.basic_blocks) {
+    for (Instruction &instr : bb.data) {
+      if (instr.contains("instr")) {
+        out[instr["instr"]].insert(bb.name);
+      }
+    }
+  }
+  return out;
+}
+
+using PhiMap = std::map<std::string, std::set<std::string>>;
+// Block name <=> variable name
+static PhiMap getPhis(Function &function, DomInfo &dom_info) {
+  auto defs = getDefBlockMap(function);
+  auto &df = dom_info.df;
+  std::map<std::string, std::set<std::string>> phis;
+  for (auto [v, def_list] : defs) {
+    // 遍历定义某个变量的基本块
+    for (const std::string &d : def_list) {
+      // 遍历基本块的支配边界
+      for (const std::string &block : df[d]) {
+        // 支配边界就是需要插入 phi node 的地方
+        if (!phis[block].contains(v)) {
+          phis[block].insert(v);
+          // phi node 也是定义该变量的一个基本块，所以也将它加入 def_list 中
+          if (!def_list.contains(block)) {
+            def_list.insert(block);
+          }
+        }
+      }
+    }
+  }
+  return phis;
+}
+
+struct SSAReanme {
+  CFG &cfg;
+  Function &function;
+  DomInfo &dom_info;
+  PhiMap phis;
+  std::map<std::string, int> counters;
+  using Stack = std::map<std::string, std::vector<std::string>>;
+  Stack stack;
+
+  std::map<
+      std::string,
+      std::map<std::string, std::vector<std::pair<std::string, std::string>>>>
+      phi_args;
+
+  std::map<std::string, std::map<std::string, std::string>> phi_dests;
+
+  SSAReanme(CFG &cfg, Function &function, DomInfo &dom_info)
+      : cfg(cfg), function(function), dom_info(dom_info) {
+    phis = getPhis(function, dom_info);
+  }
+
+  std::string pushFresh(const std::string &var) {
+    int index = counters[var]++;
+    std::string fresh = var + "." + std::to_string(index);
+    auto &var_stack = stack[var];
+    var_stack.insert(stack[var].begin(), fresh);
+    return fresh;
+  }
+
+  void doRename(const std::string &block) {
+    // Copy save the old stack.
+    Stack old_stack = stack;
+
+    // Rename phi node dests.
+    for (const std::string &p : phis[block]) {
+      phi_dests[block][p] = pushFresh(p);
+    }
+
+    auto it =
+        std::find_if(function.basic_blocks.begin(), function.basic_blocks.end(),
+                     [&](const BasicBlock &bb) { return bb.name == block; });
+    assert(it != function.basic_blocks.end());
+
+    for (Instruction &instr : it->data) {
+      // rename args of normal instructions
+      if (instr.contains("args")) {
+        std::vector<std::string> new_args;
+        for (const std::string &arg : instr["args"]) {
+          new_args.push_back(arg);
+        }
+        instr["args"] = new_args;
+      }
+      // rename dest
+      if (instr.contains("dest")) {
+        instr["dest"] = pushFresh(instr["dest"]);
+      }
+    }
+
+    // rename phis
+    for (const std::string &s : cfg.successors[block]) {
+      for (const std::string &p : phis[s]) {
+        if (!stack[p].empty()) {
+          phi_args[s][p].emplace_back(block, stack[p][0]);
+        } else {
+          assert(false && "Die!");
+        }
+      }
+    }
+    // recursive calls.
+    for (const std::string &b : dom_info.dom_tree[block]) {
+      doRename(b);
+    }
+    stack = old_stack;
+  }
+
+  void insertPhis() {
+    for (auto &[block, instrs] : function.basic_blocks) {
+      // insert
+    }
+  }
+
+  Function convert() {
+    // rename
+    BasicBlock &entry = function.basic_blocks[0];
+    std::cout << "Start renaming from " << entry.name << "\n";
+    doRename(entry.name);
+    // insert phis
+    insertPhis();
+    return function;
+  }
+};
 
 int main(int argc, char **argv) {
   nl::json ir;
@@ -436,12 +602,14 @@ int main(int argc, char **argv) {
   }
 
   for (const nl::json &function : ir["functions"]) {
-    Function program = buildFunction(function);
-    // dumpFunction(program);
-    CFG cfg = buildCFG(program);
+    Function func = buildFunction(function);
+    // dumpFunction(func);
+    CFG cfg = buildCFG(func);
     // dumpCFG(cfg);
     dumpCFGToDot(cfg);
     DomInfo dom = computeDomInfo(cfg);
     dumpDom(dom);
+    // Function ssa = convertToSSA(cfg, func);
+    // dumpFunction(ssa);
   }
 }

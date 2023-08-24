@@ -27,7 +27,7 @@ struct BasicBlock {
 
 struct Function {
   std::string name;
-  // std::vector<std::string> params;
+  std::set<std::string> args;
   std::vector<BasicBlock> basic_blocks;
 };
 
@@ -47,6 +47,9 @@ struct DomInfo {
   DomRelation dom;
   std::map<std::string, std::string> idom;
   std::map<std::string, std::set<std::string>> df;
+  std::map<std::string, std::set<std::string>> dom_tree;
 };
 
 DomInfo computeDomInfo(CFG &cfg);
+
+Function convertToSSA(Function function);
