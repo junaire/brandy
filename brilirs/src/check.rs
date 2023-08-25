@@ -1,10 +1,8 @@
 use crate::{
   basic_block::{BBFunction, BBProgram, NumifiedInstruction},
-  error::PositionalInterpError,
+  error::{InterpError, PositionalInterpError},
 };
 use bril_rs::{ConstOps, EffectOps, Instruction, Type, ValueOps};
-
-use crate::error::InterpError;
 
 use fxhash::FxHashMap;
 
@@ -45,12 +43,13 @@ fn update_env<'a>(
   dest: &'a str,
   typ: &'a Type,
 ) -> Result<(), InterpError> {
-  match env.get(dest) {
-    Some(current_typ) => check_asmt_type(current_typ, typ),
-    None => {
-      env.insert(dest, typ);
-      Ok(())
-    }
+  // https://github.com/rust-lang/rust-clippy/issues/8346
+  #[allow(clippy::option_if_let_else)]
+  if let Some(current_typ) = env.get(dest) {
+    check_asmt_type(current_typ, typ)
+  } else {
+    env.insert(dest, typ);
+    Ok(())
   }
 }
 
@@ -212,6 +211,55 @@ fn type_check_instruction<'a>(
       update_env(env, dest, op_type)
     }
     Instruction::Value {
+      op: ValueOps::Ceq | ValueOps::Cge | ValueOps::Clt | ValueOps::Cgt | ValueOps::Cle,
+      args,
+      dest,
+      funcs,
+      labels,
+      pos: _,
+      op_type,
+    } => {
+      check_num_args(2, args)?;
+      check_num_funcs(0, funcs)?;
+      check_num_labels(0, labels)?;
+      check_asmt_type(&Type::Char, get_type(env, 0, args)?)?;
+      check_asmt_type(&Type::Char, get_type(env, 1, args)?)?;
+      check_asmt_type(&Type::Bool, op_type)?;
+      update_env(env, dest, op_type)
+    }
+    Instruction::Value {
+      op: ValueOps::Char2int,
+      args,
+      dest,
+      funcs,
+      labels,
+      pos: _,
+      op_type,
+    } => {
+      check_num_args(1, args)?;
+      check_num_funcs(0, funcs)?;
+      check_num_labels(0, labels)?;
+      check_asmt_type(&Type::Char, get_type(env, 0, args)?)?;
+      check_asmt_type(&Type::Int, op_type)?;
+      update_env(env, dest, op_type)
+    }
+    Instruction::Value {
+      op: ValueOps::Int2char,
+      args,
+      dest,
+      funcs,
+      labels,
+      pos: _,
+      op_type,
+    } => {
+      check_num_args(1, args)?;
+      check_num_funcs(0, funcs)?;
+      check_num_labels(0, labels)?;
+      check_asmt_type(&Type::Int, get_type(env, 0, args)?)?;
+      check_asmt_type(&Type::Char, op_type)?;
+      update_env(env, dest, op_type)
+    }
+    Instruction::Value {
       op: ValueOps::Call,
       dest,
       op_type,
@@ -238,10 +286,11 @@ fn type_check_instruction<'a>(
           check_asmt_type(ty, &expected_arg.arg_type)
         })?;
 
-      match &callee_func.return_type {
-        None => Err(InterpError::NonEmptyRetForFunc(callee_func.name.clone())),
-        Some(t) => check_asmt_type(op_type, t),
-      }?;
+      callee_func.return_type.as_ref().map_or_else(
+        || Err(InterpError::NonEmptyRetForFunc(callee_func.name.clone())),
+        |t| check_asmt_type(op_type, t),
+      )?;
+
       update_env(env, dest, op_type)
     }
     Instruction::Value {

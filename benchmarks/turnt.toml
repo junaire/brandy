@@ -9,6 +9,10 @@ command = "cargo run --manifest-path ../brilirs/Cargo.toml --quiet -- --text --f
 output.out = "-"
 output.prof = "2"
 
+[envs.brillvm]
+default = false
+command = "bril2json < {filename} | cargo run -q --manifest-path ../bril-rs/brillvm/Cargo.toml -- -r ../bril-rs/brillvm/rt.bc -i {args}"
+
 [envs.brilift-aot]
 default = false
 command = "bril2json < {filename} | ../brilift/run.sh {args}"
@@ -22,7 +26,9 @@ command = "bril2json < {filename} | ../brilift/target/release/brilift -j -- {arg
 default = false
 command = """
 bril2json < {filename} > {base}.json
-make -C ../brilift ../benchmarks/{base}
+NAME=$(dirname {filename})/{base}
+make -C ../brilift ../benchmarks/$NAME
+mv $NAME {base}
 
 hyperfine --warmup 3 --export-json bench.json \
 'brili {args} < {base}.json' \
@@ -30,5 +36,6 @@ hyperfine --warmup 3 --export-json bench.json \
 '../brilirs/target/release/brilirs {args} < {base}.json' \
 './{base} {args}'
 
-rm -f {base}.json"""
-output."bench.json" = "bench.json"
+rm -f {base}.json
+rm {base}"""
+output."bench.json" = "../bench.json"

@@ -14,15 +14,15 @@ keywords = ["compiler", "bril", "parser", "data-structures", "language"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-clap         = { version = "3.2", features = ["derive"] }
-lalrpop-util = { version = "0.19", features = ["lexer"] }
-regex = "1.5"
+clap         = { version = "4.3", features = ["derive"] }
+lalrpop-util = { version = "0.20", features = ["lexer"] }
+regex = "1.9"
 
 # Add a build-time dependency on the lalrpop library:
 [build-dependencies]
-lalrpop = "0.19"
+lalrpop = "0.20"
 
 [dependencies.bril-rs]
 version = "0.1.0"
 path = "../../bril-rs"
-features = ["ssa", "memory", "float", "speculate", "position", "import"]
+features = ["ssa", "memory", "float", "speculate", "position", "import", "char"]

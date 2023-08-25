@@ -17,23 +17,17 @@ check out the docs for more details about what's available.
 Install the Tools
 -----------------
 
-### TypeScript Compiler & IR Interpreter
+### Reference Interpreter
 
-To install the TypeScript compiler and IR interpreter, you will need [Node][] and [Yarn][].
-Go to the `bril-ts` directory and do this:
+You will want the IR interpreter, which uses [Deno][].
+Just type this:
 
-    $ yarn
-    $ yarn build
-    $ yarn link
+    $ deno install brili.ts
 
-The last thing will install symlinks to the two utility programs, but they may not be in a standard location.
-To find where these tools were installed, run `yarn global bin`.
-You probably want to [add this to your `$PATH`][path].
+As Deno tells you, you will then need to add `$HOME/.deno/bin` to [your `$PATH`][path].
+You will then have `brili`, which takes a Bril program as JSON on stdin and executes it.
 
-The tools are `brili`, an interpreter, which takes a Bril program as JSON on stdin, and `ts2bril`, which compiles a TypeScript file given on the command line to Bril.
-
-[node]: https://nodejs.org/en/
-[yarn]: https://yarnpkg.com/en/
+[deno]: https://deno.land
 [path]: https://unix.stackexchange.com/a/26059/61192
 
 ### Text Format

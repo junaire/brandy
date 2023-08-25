@@ -1,7 +1,7 @@
 Rust Library
 ============
 
-This is a no-frills interface between Bril's JSON and your [Rust][] code. It supports the [Bril core][core] along with the [SSA][], [memory][], [floating point][float], [speculative execution][spec], and [source positions][pos] extensions.
+This is a no-frills interface between Bril's JSON and your [Rust][] code. It supports the [Bril core][core] along with the [SSA][], [memory][], [floating point][float], [speculative execution][spec], [char][], and [source positions][pos] extensions.
 
 Use
 ---
@@ -23,6 +23,10 @@ Tools
 -----
 
 This library supports fully compatible Rust implementations of `bril2txt` and `bril2json`. This library also implements the [import][] extension with a static linker called `brild`.
+
+This library is used in a Rust compiler called `rs2bril` which supports generating [core], [float], and [memory] Bril from a subset of valid Rust.
+
+This library is used in a Bril-to-LLVM IR compiler called `brillvm` which supports [core], [float], [memory], and [ssa].
 
 For ease of use, these tools can be installed and added to your path by running the following in `bril-rs/`:
 
@@ -51,4 +55,5 @@ make features
 [float]: ../lang/float.md
 [spec]: ../lang/spec.md
 [pos]: ../lang/syntax.md
+[char]: ../lang/char.md
 [import]: ../lang/import.md

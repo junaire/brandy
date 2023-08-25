@@ -48,7 +48,7 @@ pub struct AbstractFunction {
     pub name: String,
     /// The position of this function in the original source code
     #[cfg(feature = "position")]
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
     pub pos: Option<Position>,
     /// The possible return type of this function
     #[serde(rename = "type")]
@@ -101,6 +101,7 @@ impl Display for AbstractArgument {
 
 /// <https://capra.cs.cornell.edu/bril/lang/syntax.html#function>
 /// Code is a Label or an Instruction
+#[cfg_attr(not(feature = "float"), derive(Eq))]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum AbstractCode {
@@ -110,7 +111,7 @@ pub enum AbstractCode {
         label: String,
         /// Where the label is located in source code
         #[cfg(feature = "position")]
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(flatten, skip_serializing_if = "Option::is_none")]
         pos: Option<Position>,
     },
     /// <https://capra.cs.cornell.edu/bril/lang/syntax.html#instruction>
@@ -120,17 +121,18 @@ pub enum AbstractCode {
 impl Display for AbstractCode {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            AbstractCode::Label {
+            Self::Label {
                 label,
                 #[cfg(feature = "position")]
                     pos: _,
             } => write!(f, ".{label}:"),
-            AbstractCode::Instruction(instr) => write!(f, "  {instr}"),
+            Self::Instruction(instr) => write!(f, "  {instr}"),
         }
     }
 }
 
 /// <https://capra.cs.cornell.edu/bril/lang/syntax.html#instruction>
+#[cfg_attr(not(feature = "float"), derive(Eq))]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum AbstractInstruction {
@@ -142,7 +144,7 @@ pub enum AbstractInstruction {
         op: ConstOps,
         /// The source position of the instruction if provided
         #[cfg(feature = "position")]
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(flatten, skip_serializing_if = "Option::is_none")]
         pos: Option<Position>,
         /// Type of variable
         #[serde(rename = "type")]
@@ -167,7 +169,7 @@ pub enum AbstractInstruction {
         op: String,
         /// The source position of the instruction if provided
         #[cfg(feature = "position")]
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(flatten, skip_serializing_if = "Option::is_none")]
         pos: Option<Position>,
         /// Type of variable
         #[serde(rename = "type")]
@@ -188,7 +190,7 @@ pub enum AbstractInstruction {
         op: String,
         /// The source position of the instruction if provided
         #[cfg(feature = "position")]
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(flatten, skip_serializing_if = "Option::is_none")]
         pos: Option<Position>,
     },
 }
@@ -196,7 +198,7 @@ pub enum AbstractInstruction {
 impl Display for AbstractInstruction {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            AbstractInstruction::Constant {
+            Self::Constant {
                 op,
                 dest,
                 const_type,
@@ -207,7 +209,7 @@ impl Display for AbstractInstruction {
                 Some(const_type) => write!(f, "{dest}: {const_type} = {op} {value};"),
                 None => write!(f, "{dest} = {op} {value};"),
             },
-            AbstractInstruction::Value {
+            Self::Value {
                 op,
                 dest,
                 op_type,
@@ -232,7 +234,7 @@ impl Display for AbstractInstruction {
                 }
                 write!(f, ";")
             }
-            AbstractInstruction::Effect {
+            Self::Effect {
                 op,
                 args,
                 funcs,
@@ -259,9 +261,9 @@ impl Display for AbstractInstruction {
 /// <https://capra.cs.cornell.edu/bril/lang/syntax.html#type>
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AbstractType {
-    /// For example "bool" => Primitive("bool")
+    /// For example `bool` => `Primitive("bool")`
     Primitive(String),
-    /// For example "ptr<bool>" => Parameterized("ptr", Box::new(Primitive("bool")))
+    /// For example `ptr<bool>` => `Parameterized("ptr", Box::new(Primitive("bool")))`
     Parameterized(String, Box<Self>),
 }
 
@@ -329,8 +331,8 @@ impl Serialize for AbstractType {
         S: Serializer,
     {
         match self {
-            AbstractType::Primitive(s) => serializer.serialize_str(s),
-            AbstractType::Parameterized(t, at) => {
+            Self::Primitive(s) => serializer.serialize_str(s),
+            Self::Parameterized(t, at) => {
                 let mut map = serializer.serialize_map(Some(1))?;
                 map.serialize_entry(t, at)?;
                 map.end()
@@ -342,9 +344,8 @@ impl Serialize for AbstractType {
 impl Display for AbstractType {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            AbstractType::Primitive(t) => write!(f, "{t}"),
-
-            AbstractType::Parameterized(t, at) => write!(f, "{t}<{at}>"),
+            Self::Primitive(t) => write!(f, "{t}"),
+            Self::Parameterized(t, at) => write!(f, "{t}<{at}>"),
         }
     }
 }

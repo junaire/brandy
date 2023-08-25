@@ -21,6 +21,8 @@ pub enum InterpError {
   NoMainFunction,
   #[error("phi node has unequal numbers of labels and args")]
   UnequalPhiNode,
+  #[error("char must have one character")]
+  NotOneChar,
   #[error("multiple functions of the same name found")]
   DuplicateFunction,
   #[error("Expected empty return for `{0}`, found value")]
@@ -51,8 +53,10 @@ pub enum InterpError {
   BadFuncArgType(bril_rs::Type, String), // (expected, actual)
   #[error("Expected type `{0:?}` for assignment, found `{1:?}`")]
   BadAsmtType(bril_rs::Type, bril_rs::Type), // (expected, actual). For when the LHS type of an instruction is bad
-  #[error("There has been an io error when trying to print: `{0:?}`")]
-  IoError(Box<std::io::Error>),
+  #[error("There has been an io error: `{0:?}`")]
+  IoError(#[from] std::io::Error),
+  #[error("value ${0} cannot be converted to char")]
+  ToCharError(i64),
   #[error("You probably shouldn't see this error, this is here to handle conversions between InterpError and PositionalError")]
   PositionalInterpErrorConversion(#[from] PositionalInterpError),
 }
@@ -79,10 +83,58 @@ pub struct PositionalInterpError {
 impl Display for PositionalInterpError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      PositionalInterpError { e, pos: Some(pos) } => {
+      Self {
+        e,
+        pos:
+          Some(Position {
+            pos,
+            pos_end: Some(end),
+            src: Some(s),
+          }),
+      } => {
+        write!(
+          f,
+          "{s}:{}:{} to {s}:{}:{} \n\t {e}",
+          pos.row, pos.col, end.row, end.col
+        )
+      }
+      Self {
+        e,
+        pos:
+          Some(Position {
+            pos,
+            pos_end: None,
+            src: Some(s),
+          }),
+      } => {
+        write!(f, "{s}:{}:{} \n\t {e}", pos.row, pos.col)
+      }
+      Self {
+        e,
+        pos:
+          Some(Position {
+            pos,
+            pos_end: Some(end),
+            src: None,
+          }),
+      } => {
+        write!(
+          f,
+          "Line {}, Column {} to Line {}, Column {}: {e}",
+          pos.row, pos.col, end.row, end.col
+        )
+      }
+      Self {
+        e,
+        pos: Some(Position {
+          pos,
+          pos_end: None,
+          src: None,
+        }),
+      } => {
         write!(f, "Line {}, Column {}: {e}", pos.row, pos.col)
       }
-      PositionalInterpError { e, pos: None } => write!(f, "{e}"),
+      Self { e, pos: None } => write!(f, "{e}"),
     }
   }
 }

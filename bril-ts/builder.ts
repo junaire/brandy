@@ -1,4 +1,4 @@
-import * as bril from './bril';
+import * as bril from './bril.ts';
 
 /**
  * A utility for building up Bril programs.
@@ -100,6 +100,13 @@ export class Builder {
   }
 
   /**
+   * Build a constant character value.
+   */
+  buildChar(value: string, dest?: string) {
+    return this.buildConst(value, "char", dest);
+  }
+
+  /**
    * Add a label to the function at the current position.
    */
   buildLabel(name: string) {
@@ -133,5 +140,9 @@ export class Builder {
     let out = '.' + this.nextFresh.toString();
     this.nextFresh += 1;
     return out;
+  }
+
+  setCurrentFunction(func: bril.Function) {
+    this.curFunction = func;
   }
 }

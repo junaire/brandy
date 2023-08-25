@@ -1,9 +1,13 @@
-use std::fmt::{self, Display, Formatter};
+use std::{
+    fmt::{self, Display, Formatter},
+    hash::Hash,
+};
 
 use serde::{Deserialize, Serialize};
 
 /// Equivalent to a file of bril code
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(not(feature = "float"), derive(Eq))]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Program {
     /// A list of functions declared in the program
     pub functions: Vec<Function>,
@@ -28,7 +32,7 @@ impl Display for Program {
 
 /// <https://capra.cs.cornell.edu/bril/lang/import.html#syntax>
 #[cfg(feature = "import")]
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Import {
     /// A list of functions to be imported
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -57,7 +61,7 @@ impl Display for Import {
 
 /// <https://capra.cs.cornell.edu/bril/lang/import.html#syntax>
 #[cfg(feature = "import")]
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ImportedFunction {
     #[serde(skip_serializing_if = "Option::is_none")]
     /// A function can be optionally aliased with a different name for use in the rest of the program
@@ -71,14 +75,15 @@ impl Display for ImportedFunction {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name)?;
         if let Some(a) = self.alias.as_ref() {
-            write!(f, " as {}", a)?;
+            write!(f, " as {a}")?;
         }
         Ok(())
     }
 }
 
 /// <https://capra.cs.cornell.edu/bril/lang/syntax.html#function>
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(not(feature = "float"), derive(Eq))]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Function {
     /// Any arguments the function accepts
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -90,7 +95,7 @@ pub struct Function {
     pub name: String,
     /// The position of this function in the original source code
     #[cfg(feature = "position")]
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
     pub pos: Option<Position>,
     /// The possible return type of this function
     #[serde(rename = "type")]
@@ -126,7 +131,7 @@ impl Display for Function {
 /// An argument of a function
 /// <https://capra.cs.cornell.edu/bril/lang/syntax.html#function>
 /// Example: a : int
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Argument {
     /// a
     pub name: String,
@@ -143,6 +148,7 @@ impl Display for Argument {
 
 /// <https://capra.cs.cornell.edu/bril/lang/syntax.html#function>
 /// Code is a Label or an Instruction
+#[cfg_attr(not(feature = "float"), derive(Eq))]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum Code {
@@ -152,7 +158,7 @@ pub enum Code {
         label: String,
         /// Where the label is located in source code
         #[cfg(feature = "position")]
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(flatten, skip_serializing_if = "Option::is_none")]
         pos: Option<Position>,
     },
     /// <https://capra.cs.cornell.edu/bril/lang/syntax.html#instruction>
@@ -162,17 +168,18 @@ pub enum Code {
 impl Display for Code {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Code::Label {
+            Self::Label {
                 label,
                 #[cfg(feature = "position")]
                     pos: _,
             } => write!(f, ".{label}:"),
-            Code::Instruction(instr) => write!(f, "  {instr}"),
+            Self::Instruction(instr) => write!(f, "  {instr}"),
         }
     }
 }
 
 /// <https://capra.cs.cornell.edu/bril/lang/syntax.html#instruction>
+#[cfg_attr(not(feature = "float"), derive(Eq))]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum Instruction {
@@ -184,7 +191,7 @@ pub enum Instruction {
         op: ConstOps,
         #[cfg(feature = "position")]
         /// The source position of the instruction if provided
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(flatten, skip_serializing_if = "Option::is_none")]
         pos: Option<Position>,
         /// Type of variable
         #[serde(rename = "type")]
@@ -209,7 +216,7 @@ pub enum Instruction {
         op: ValueOps,
         /// The source position of the instruction if provided
         #[cfg(feature = "position")]
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(flatten, skip_serializing_if = "Option::is_none")]
         pos: Option<Position>,
         /// Type of variable
         #[serde(rename = "type")]
@@ -230,7 +237,7 @@ pub enum Instruction {
         op: EffectOps,
         /// The source position of the instruction if provided
         #[cfg(feature = "position")]
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(flatten, skip_serializing_if = "Option::is_none")]
         pos: Option<Position>,
     },
 }
@@ -239,11 +246,11 @@ pub enum Instruction {
 impl Instruction {
     /// A helper function to extract the position value if it exists from an instruction
     #[must_use]
-    pub const fn get_pos(&self) -> Option<Position> {
+    pub fn get_pos(&self) -> Option<Position> {
         match self {
-            Instruction::Constant { pos, .. }
-            | Instruction::Value { pos, .. }
-            | Instruction::Effect { pos, .. } => *pos,
+            Self::Constant { pos, .. } | Self::Value { pos, .. } | Self::Effect { pos, .. } => {
+                pos.clone()
+            }
         }
     }
 }
@@ -251,7 +258,7 @@ impl Instruction {
 impl Display for Instruction {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Instruction::Constant {
+            Self::Constant {
                 op,
                 dest,
                 const_type,
@@ -261,7 +268,7 @@ impl Display for Instruction {
             } => {
                 write!(f, "{dest}: {const_type} = {op} {value};")
             }
-            Instruction::Value {
+            Self::Value {
                 op,
                 dest,
                 op_type,
@@ -283,7 +290,7 @@ impl Display for Instruction {
                 }
                 write!(f, ";")
             }
-            Instruction::Effect {
+            Self::Effect {
                 op,
                 args,
                 funcs,
@@ -444,6 +451,27 @@ pub enum ValueOps {
     /// <https://capra.cs.cornell.edu/bril/lang/float.html#operations>
     #[cfg(feature = "float")]
     Fge,
+    /// <https://capra.cs.cornell.edu/bril/lang/char.html#operations>
+    #[cfg(feature = "char")]
+    Ceq,
+    /// <https://capra.cs.cornell.edu/bril/lang/char.html#operations>
+    #[cfg(feature = "char")]
+    Clt,
+    /// <https://capra.cs.cornell.edu/bril/lang/char.html#operations>
+    #[cfg(feature = "char")]
+    Cgt,
+    /// <https://capra.cs.cornell.edu/bril/lang/char.html#operations>
+    #[cfg(feature = "char")]
+    Cle,
+    /// <https://capra.cs.cornell.edu/bril/lang/char.html#operations>
+    #[cfg(feature = "char")]
+    Cge,
+    /// <https://capra.cs.cornell.edu/bril/lang/char.html#operations>
+    #[cfg(feature = "char")]
+    Char2int,
+    /// <https://capra.cs.cornell.edu/bril/lang/char.html#operations>
+    #[cfg(feature = "char")]
+    Int2char,
     /// <https://capra.cs.cornell.edu/bril/lang/memory.html#operations>
     #[cfg(feature = "memory")]
     Alloc,
@@ -492,6 +520,20 @@ impl Display for ValueOps {
             Self::Fle => write!(f, "fle"),
             #[cfg(feature = "float")]
             Self::Fge => write!(f, "fge"),
+            #[cfg(feature = "char")]
+            Self::Ceq => write!(f, "ceq"),
+            #[cfg(feature = "char")]
+            Self::Clt => write!(f, "clt"),
+            #[cfg(feature = "char")]
+            Self::Cgt => write!(f, "cgt"),
+            #[cfg(feature = "char")]
+            Self::Cle => write!(f, "cle"),
+            #[cfg(feature = "char")]
+            Self::Cge => write!(f, "cge"),
+            #[cfg(feature = "char")]
+            Self::Char2int => write!(f, "char2int"),
+            #[cfg(feature = "char")]
+            Self::Int2char => write!(f, "int2char"),
             #[cfg(feature = "memory")]
             Self::Alloc => write!(f, "alloc"),
             #[cfg(feature = "memory")]
@@ -513,6 +555,9 @@ pub enum Type {
     /// <https://capra.cs.cornell.edu/bril/lang/float.html#types>
     #[cfg(feature = "float")]
     Float,
+    /// <https://capra.cs.cornell.edu/bril/lang/char.html#types>
+    #[cfg(feature = "char")]
+    Char,
     /// <https://capra.cs.cornell.edu/bril/lang/memory.html#types>
     #[cfg(feature = "memory")]
     #[serde(rename = "ptr")]
@@ -526,6 +571,8 @@ impl Display for Type {
             Self::Bool => write!(f, "bool"),
             #[cfg(feature = "float")]
             Self::Float => write!(f, "float"),
+            #[cfg(feature = "char")]
+            Self::Char => write!(f, "char"),
             #[cfg(feature = "memory")]
             Self::Pointer(tpe) => write!(f, "ptr<{tpe}>"),
         }
@@ -533,6 +580,7 @@ impl Display for Type {
 }
 
 /// A JSON number/value
+#[cfg_attr(not(feature = "float"), derive(Eq, Hash))]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum Literal {
@@ -543,16 +591,36 @@ pub enum Literal {
     /// Floating Points
     #[cfg(feature = "float")]
     Float(f64),
+    /// UTF-16 Characters
+    #[cfg(feature = "char")]
+    Char(char),
 }
 
 impl Display for Literal {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Literal::Int(i) => write!(f, "{i}"),
-            Literal::Bool(b) => write!(f, "{b}"),
+            Self::Int(i) => write!(f, "{i}"),
+            Self::Bool(b) => write!(f, "{b}"),
             #[cfg(feature = "float")]
-            Literal::Float(x) => write!(f, "{x}"),
+            Self::Float(x) => write!(f, "{x}"),
+            #[cfg(feature = "char")]
+            Self::Char(c) => write!(f, "\'{}\'", escape_char(*c)),
         }
+    }
+}
+
+#[cfg(feature = "char")]
+fn escape_char(c: char) -> String {
+    match c {
+        '\u{0000}' => "\\0".to_string(),
+        '\u{0007}' => "\\a".to_string(),
+        '\u{0008}' => "\\b".to_string(),
+        '\u{0009}' => "\\t".to_string(),
+        '\u{000A}' => "\\n".to_string(),
+        '\u{000B}' => "\\v".to_string(),
+        '\u{000C}' => "\\f".to_string(),
+        '\u{000D}' => "\\r".to_string(),
+        c => c.to_string(),
     }
 }
 
@@ -561,17 +629,32 @@ impl Literal {
     #[must_use]
     pub const fn get_type(&self) -> Type {
         match self {
-            Literal::Int(_) => Type::Int,
-            Literal::Bool(_) => Type::Bool,
+            Self::Int(_) => Type::Int,
+            Self::Bool(_) => Type::Bool,
             #[cfg(feature = "float")]
-            Literal::Float(_) => Type::Float,
+            Self::Float(_) => Type::Float,
+            #[cfg(feature = "char")]
+            Self::Char(_) => Type::Char,
         }
     }
 }
 
 /// <https://capra.cs.cornell.edu/bril/lang/syntax.html#source-positions>
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Position {
+    /// Starting position
+    pub pos: ColRow,
+    /// Optional ending position
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pos_end: Option<ColRow>,
+    /// Optional absolute path to source file
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub src: Option<String>,
+}
+
+/// <https://capra.cs.cornell.edu/bril/lang/syntax.html#source-positions>
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ColRow {
     /// Column
     pub col: u64,
     /// Row

@@ -1,4 +1,4 @@
-import * as bril from './bril';
+import * as bril from './bril.ts';
 
 /**
  * An abstract type signature.
@@ -99,7 +99,7 @@ export const OP_SIGS: {[key: string]: Signature | PolySignature} = {
   'fgt': {args: ['float', 'float'], dest: 'bool'},
   'fle': {args: ['float', 'float'], dest: 'bool'},
   'fge': {args: ['float', 'float'], dest: 'bool'},
-  
+
   // Memory.
   'alloc': {tvar: {tv: 'T'}, sig: {args: ['int'], dest: {ptr: {tv: 'T'}}}},
   'free': {tvar: {tv: 'T'}, sig: {args: [{ptr: {tv: 'T'}}]}},
@@ -111,4 +111,13 @@ export const OP_SIGS: {[key: string]: Signature | PolySignature} = {
   'speculate': {args: []},
   'commit': {args: []},
   'guard': {args: ['bool'], labels: 1},
+
+  // Character.
+  'ceq': {args: ['char', 'char'], dest: 'bool'},
+  'clt': {args: ['char', 'char'], dest: 'bool'},
+  'cgt': {args: ['char', 'char'], dest: 'bool'},
+  'cle': {args: ['char', 'char'], dest: 'bool'},
+  'cge': {args: ['char', 'char'], dest: 'bool'},
+  'char2int': {args: ['char'], dest: 'int'},
+  'int2char': {args: ['int'], dest: 'char'},
 };

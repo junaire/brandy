@@ -72,14 +72,14 @@ impl Display for PositionalConversionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             #[cfg(feature = "position")]
-            PositionalConversionError { e, pos: Some(pos) } => {
-                write!(f, "Line {}, Column {}: {e}", pos.row, pos.col)
+            Self { e, pos: Some(pos) } => {
+                write!(f, "Line {}, Column {}: {e}", pos.pos.row, pos.pos.col)
             }
             #[cfg(not(feature = "position"))]
-            PositionalConversionError { e: _, pos: Some(_) } => {
+            Self { e: _, pos: Some(_) } => {
                 unreachable!()
             }
-            PositionalConversionError { e, pos: None } => write!(f, "{e}"),
+            Self { e, pos: None } => write!(f, "{e}"),
         }
     }
 }
@@ -121,7 +121,7 @@ impl TryFrom<AbstractFunction> for Function {
                 .into_iter()
                 .map(std::convert::TryInto::try_into)
                 .collect::<Result<Vec<Argument>, _>>()
-                .map_err(|e| e.add_pos(pos))?,
+                .map_err(|e| e.add_pos(pos.clone()))?,
             instrs: instrs
                 .into_iter()
                 .map(std::convert::TryInto::try_into)
@@ -129,7 +129,10 @@ impl TryFrom<AbstractFunction> for Function {
             name,
             return_type: match return_type {
                 None => None,
-                Some(t) => Some(t.try_into().map_err(|e: ConversionError| e.add_pos(pos))?),
+                Some(t) => Some(
+                    t.try_into()
+                        .map_err(|e: ConversionError| e.add_pos(pos.clone()))?,
+                ),
             },
             #[cfg(feature = "position")]
             pos,
@@ -183,7 +186,7 @@ impl TryFrom<AbstractInstruction> for Instruction {
                 op,
                 const_type: const_type
                     .try_into()
-                    .map_err(|e: ConversionError| e.add_pos(pos))?,
+                    .map_err(|e: ConversionError| e.add_pos(pos.clone()))?,
                 value,
                 #[cfg(feature = "position")]
                 pos,
@@ -204,9 +207,9 @@ impl TryFrom<AbstractInstruction> for Instruction {
                 labels,
                 op_type: op_type
                     .try_into()
-                    .map_err(|e: ConversionError| e.add_pos(pos))?,
+                    .map_err(|e: ConversionError| e.add_pos(pos.clone()))?,
                 #[cfg(feature = "position")]
-                pos,
+                pos: pos.clone(),
                 op: match op.as_ref() {
                     "add" => ValueOps::Add,
                     "mul" => ValueOps::Mul,
@@ -242,6 +245,20 @@ impl TryFrom<AbstractInstruction> for Instruction {
                     "fle" => ValueOps::Fle,
                     #[cfg(feature = "float")]
                     "fge" => ValueOps::Fge,
+                    #[cfg(feature = "char")]
+                    "ceq" => ValueOps::Ceq,
+                    #[cfg(feature = "char")]
+                    "clt" => ValueOps::Clt,
+                    #[cfg(feature = "char")]
+                    "cgt" => ValueOps::Cgt,
+                    #[cfg(feature = "char")]
+                    "cle" => ValueOps::Cle,
+                    #[cfg(feature = "char")]
+                    "cge" => ValueOps::Cge,
+                    #[cfg(feature = "char")]
+                    "char2int" => ValueOps::Char2int,
+                    #[cfg(feature = "char")]
+                    "int2char" => ValueOps::Int2char,
                     #[cfg(feature = "memory")]
                     "alloc" => ValueOps::Alloc,
                     #[cfg(feature = "memory")]
@@ -266,7 +283,7 @@ impl TryFrom<AbstractInstruction> for Instruction {
                 funcs,
                 labels,
                 #[cfg(feature = "position")]
-                pos,
+                pos: pos.clone(),
                 op: match op.as_ref() {
                     "jmp" => EffectOps::Jump,
                     "br" => EffectOps::Branch,
@@ -298,10 +315,7 @@ impl TryFrom<Option<AbstractType>> for Type {
     type Error = ConversionError;
 
     fn try_from(value: Option<AbstractType>) -> Result<Self, Self::Error> {
-        match value {
-            Some(t) => t.try_into(),
-            None => Err(ConversionError::MissingType),
-        }
+        value.map_or(Err(ConversionError::MissingType), TryInto::try_into)
     }
 }
 
@@ -313,6 +327,8 @@ impl TryFrom<AbstractType> for Type {
             AbstractType::Primitive(t) if t == "bool" => Self::Bool,
             #[cfg(feature = "float")]
             AbstractType::Primitive(t) if t == "float" => Self::Float,
+            #[cfg(feature = "char")]
+            AbstractType::Primitive(t) if t == "char" => Self::Char,
             AbstractType::Primitive(t) => return Err(ConversionError::InvalidPrimitive(t)),
             #[cfg(feature = "memory")]
             AbstractType::Parameterized(t, ty) if t == "ptr" => {

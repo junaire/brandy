@@ -2,8 +2,6 @@
 #![warn(missing_docs)]
 #![doc = include_str!("../README.md")]
 #![allow(clippy::too_many_lines)]
-// https://github.com/rust-lang/rust-clippy/issues/6902
-#![allow(clippy::use_self)]
 
 /// Provides the unstructured representation of Bril programs
 pub mod abstract_program;
