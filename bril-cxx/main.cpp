@@ -466,8 +466,8 @@ static std::map<std::string, std::set<std::string>> getDefBlockMap(
   std::map<std::string, std::set<std::string>> out;
   for (BasicBlock &bb : function.basic_blocks) {
     for (Instruction &instr : bb.data) {
-      if (instr.contains("instr")) {
-        out[instr["instr"]].insert(bb.name);
+      if (instr.contains("dest")) {
+        out[instr["dest"]].insert(bb.name);
       }
     }
   }
@@ -495,6 +495,13 @@ static PhiMap getPhis(Function &function, DomInfo &dom_info) {
         }
       }
     }
+  }
+  for (const auto &[block_name, vars] : phis) {
+    std::cout << block_name << ": [";
+    for (const std::string &var : vars) {
+      std::cout << var << ", ";
+    }
+    std::cout << "]\n";
   }
   return phis;
 }
@@ -563,7 +570,7 @@ struct SSAReanme {
         if (!stack[p].empty()) {
           phi_args[s][p].emplace_back(block, stack[p][0]);
         } else {
-          assert(false && "Die!");
+          phi_args[s][p].emplace_back(block, "__undef");
         }
       }
     }
@@ -591,6 +598,11 @@ struct SSAReanme {
   }
 };
 
+Function convertToSSA(CFG &cfg, Function function, DomInfo &dom) {
+  SSAReanme ssa(cfg, function, dom);
+  return ssa.convert();
+}
+
 int main(int argc, char **argv) {
   nl::json ir;
   if (argc == 1)
@@ -608,7 +620,7 @@ int main(int argc, char **argv) {
     // dumpCFGToDot(cfg);
     DomInfo dom = computeDomInfo(cfg);
     // dumpDom(dom);
-    // Function ssa = convertToSSA(cfg, func);
+    Function ssa = convertToSSA(cfg, func, dom);
     // dumpFunction(ssa);
   }
 }

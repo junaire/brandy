@@ -52,4 +52,4 @@ struct DomInfo {
 
 DomInfo computeDomInfo(CFG &cfg);
 
-Function convertToSSA(Function function);
+Function convertToSSA(CFG& cfg, Function function, DomInfo& dom);
