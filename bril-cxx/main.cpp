@@ -61,7 +61,6 @@ static void dumpFunction(const Function &function) {
 }
 
 static void dumpCFG(const CFG &cfg) {
-  dumpFunction(cfg.function);
   std::cout << "\n";
   if (!cfg.successors.empty()) {
     std::cout << "Successors:\n";
@@ -118,7 +117,7 @@ Function buildFunction(const nl::json &function) {
 
   if (function.contains("args")) {
     for (const nl::json &arg : function["args"]) {
-      program.args.insert(arg.template get<std::string>());
+      program.args.insert(arg["name"]);
     }
   }
 
@@ -606,9 +605,9 @@ int main(int argc, char **argv) {
     // dumpFunction(func);
     CFG cfg = buildCFG(func);
     // dumpCFG(cfg);
-    dumpCFGToDot(cfg);
+    // dumpCFGToDot(cfg);
     DomInfo dom = computeDomInfo(cfg);
-    dumpDom(dom);
+    // dumpDom(dom);
     // Function ssa = convertToSSA(cfg, func);
     // dumpFunction(ssa);
   }
