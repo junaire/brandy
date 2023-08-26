@@ -41,7 +41,7 @@ struct CFG {
   std::map<std::string, std::vector<std::string>> predecessors;
   std::map<std::string, std::vector<std::string>> successors;
   void dump() const;
-  void dumpDot() const;
+  void dumpDot(const std::string &filepath) const;
 };
 
 Function buildFunction(const nl::json &function);
@@ -63,4 +63,3 @@ DomInfo computeDomInfo(CFG &cfg);
 using PhiMap = std::map<std::string, std::set<std::string>>;
 
 Function convertToSSA(CFG &cfg, Function function, DomInfo &dom);
-

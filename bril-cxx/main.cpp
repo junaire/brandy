@@ -149,19 +149,21 @@ CFG buildCFG(Function &function) {
     }
   }
 
-  std::vector<std::string> entry_succs;
-  std::vector<std::string> exit_preds;
+  // If we only have one BB that doesn't have preds, we don't need to insert
+  // another entry node.
+  // std::vector<std::string> entry_succs;
+  // std::vector<std::string> exit_preds;
 
-  for (const BasicBlock &bb : cfg.function.basic_blocks) {
-    if (cfg.predecessors[bb.name].empty()) {
-      entry_succs.push_back(bb.name);
-    }
-    if (cfg.successors[bb.name].empty()) {
-      exit_preds.push_back(bb.name);
-    }
-  }
+  // for (const BasicBlock &bb : cfg.function.basic_blocks) {
+  //   if (cfg.predecessors[bb.name].empty()) {
+  //     entry_succs.push_back(bb.name);
+  //   }
+  //   if (cfg.successors[bb.name].empty()) {
+  //     exit_preds.push_back(bb.name);
+  //   }
+  // }
 
-  // cfg.function.basic_blocks.insert(cfg.function.basic_blocks.begin(),
+  // // cfg.function.basic_blocks.insert(cfg.function.basic_blocks.begin(),
   //                                  BasicBlock{.name = "Entry"});
   // cfg.function.basic_blocks.push_back(BasicBlock{.name = "Exit"});
 
@@ -204,8 +206,8 @@ void CFG::dump() const {
   // }
 }
 
-void CFG::dumpDot() const {
-  std::string file = function.name + ".dot";
+void CFG::dumpDot(const std::string &filepath) const {
+  std::string file = filepath + "/" + function.name + ".dot";
   std::ofstream f(file);
   f << "digraph " << function.name << " {\n";
   f << "node [shape=box, style=filled]\n";
@@ -491,9 +493,9 @@ static PhiMap getPhis(Function &function, DomInfo &dom_info) {
   std::map<std::string, std::set<std::string>> phis;
   for (auto [v, def_list] : defs) {
     // 遍历定义某个变量的基本块
-    for (const std::string &d : def_list) {
+    for (auto d = def_list.begin(); d != def_list.end(); ++d) {
       // 遍历基本块的支配边界
-      for (const std::string &block : df[d]) {
+      for (const std::string &block : df[*d]) {
         // 支配边界就是需要插入 phi node 的地方
         if (!phis[block].contains(v)) {
           phis[block].insert(v);
@@ -505,13 +507,13 @@ static PhiMap getPhis(Function &function, DomInfo &dom_info) {
       }
     }
   }
-  for (const auto &[block_name, vars] : phis) {
-    std::cout << block_name << ": [";
-    for (const std::string &var : vars) {
-      std::cout << var << ", ";
-    }
-    std::cout << "]\n";
-  }
+  // for (const auto &[block_name, vars] : phis) {
+  //   std::cout << block_name << ": [";
+  //   for (const std::string &var : vars) {
+  //     std::cout << var << ", ";
+  //   }
+  //   std::cout << "]\n";
+  // }
   return phis;
 }
 
@@ -523,6 +525,7 @@ struct SSAReanme {
   std::map<std::string, int> counters;
   using Stack = std::map<std::string, std::vector<std::string>>;
   Stack stack;
+  std::map<std::string, std::string> reaching_def;
 
   std::map<
       std::string,
@@ -544,6 +547,54 @@ struct SSAReanme {
     return fresh;
   }
 
+  void updateReachingDef(const std::string &v, const BasicBlock &p) {
+    auto r = v;
+    r = reaching_def[r];
+    bool cond = false;  // def(r) dominates p
+    while (!r.empty() && !cond) {
+      r = reaching_def[r];
+    }
+    reaching_def[v] = r;
+  }
+
+  // dfs preorder
+  // variables based
+  void Rename2(const std::string &block) {
+    auto it =
+        std::find_if(function.basic_blocks.begin(), function.basic_blocks.end(),
+                     [&](const BasicBlock &bb) { return bb.name == block; });
+    assert(it != function.basic_blocks.end());
+
+    // foreach instruction in BB
+    for (Instruction &instr : it->data) {
+      // arg use in non-phi
+      // need to check it's not a phi
+      if (instr.contains("args")) {
+        std::vector<std::string> new_args;
+        for (const std::string &arg : instr["args"]) {
+          new_args.push_back(arg);
+        }
+        // updateRechingRef()
+        instr["args"] = new_args;
+      }
+
+      // defined
+      if (instr.contains("args")) {
+        // updateRechingRef()
+        std::string new_var = pushFresh(instr["dest"]);
+        // new_var.reachingDef = v.reachingDef
+        // v.reachingDef = new_var
+      }
+    }
+    // phi in direct succ
+    for (const std::string &s : cfg.successors[block]) {
+      // foreach phi in s
+      // if phis[args] coming from this BB
+      // updateReachingDef()
+      //
+    }
+  }
+
   void doRename(const std::string &block) {
     // Copy save the old stack.
     Stack old_stack = stack;
@@ -563,7 +614,7 @@ struct SSAReanme {
       if (instr.contains("args")) {
         std::vector<std::string> new_args;
         for (const std::string &arg : instr["args"]) {
-          new_args.push_back(arg);
+          new_args.push_back(stack[arg][0]);
         }
         instr["args"] = new_args;
       }
@@ -579,6 +630,7 @@ struct SSAReanme {
         if (!stack[p].empty()) {
           phi_args[s][p].emplace_back(block, stack[p][0]);
         } else {
+          // Looks like we can just throw it away?
           phi_args[s][p].emplace_back(block, "__undef");
         }
       }
@@ -591,15 +643,31 @@ struct SSAReanme {
   }
 
   void insertPhis() {
-    for (auto &[block, instrs] : function.basic_blocks) {
-      // insert
+    for (auto &block : function.basic_blocks) {
+      for (auto &[dest, pairs] : phi_args[block.name]) {
+        // std::cout << "dest: " << dest << "\n";
+        // std::cout << "pairs:\n";
+        // for (const auto &pair : pairs) {
+        //   std::cout << "(" << pair.first << " " << pair.second << "), ";
+        // }
+        // std::cout << "\n";
+
+        nl::json phi;
+        phi["op"] = "phi";
+        phi["dest"] = phi_dests[block.name][dest];
+        phi["type"] = "int";  // Hardcode it should be fine for now...
+        for (const auto &pair : pairs) {
+          phi["labels"].push_back(pair.first);
+          phi["args"].push_back(pair.second);
+        }
+        block.data.push_front(std::move(phi));
+      }
     }
   }
 
   Function convert() {
     // rename
     BasicBlock &entry = function.basic_blocks[0];
-    std::cout << "Start renaming from " << entry.name << "\n";
     doRename(entry.name);
     // insert phis
     insertPhis();
@@ -623,13 +691,11 @@ int main(int argc, char **argv) {
 
   for (const nl::json &function : ir["functions"]) {
     Function func = buildFunction(function);
-    // dumpFunction(func);
+    // func.dump();
     CFG cfg = buildCFG(func);
-    // dumpCFG(cfg);
-    // dumpCFGToDot(cfg);
+    // cfg.dumpDot("/tmp");
     DomInfo dom = computeDomInfo(cfg);
-    // dumpDom(dom);
+    // dom.dump();
     Function ssa = convertToSSA(cfg, func, dom);
-    // dumpFunction(ssa);
   }
 }
