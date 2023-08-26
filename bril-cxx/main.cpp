@@ -695,6 +695,38 @@ nl::json FunctionToJson(const Function &func) {
   return out;
 }
 
+void die(Function &func) {
+  std::set<std::string> uses;
+  // Collect uses.
+  for (auto bb_it = func.basic_blocks.begin(); bb_it != func.basic_blocks.end();
+       bb_it++) {
+    for (auto instr_it = bb_it->data.begin(); instr_it != bb_it->data.end();
+         instr_it++) {
+      if (instr_it->contains("args")) {
+        for (const auto &arg : (*instr_it)["args"]) {
+          uses.insert(arg.template get<std::string>());
+        }
+      }
+    }
+  }
+
+  for (auto bb_it = func.basic_blocks.begin(); bb_it != func.basic_blocks.end();
+       bb_it++) {
+    for (auto instr_it = bb_it->data.begin(); instr_it != bb_it->data.end();
+         instr_it++) {
+      if (instr_it->contains("dest")) {
+        auto dest = (*instr_it)["dest"];
+        std::string dest_name = dest.template get<std::string>();
+        // std::cout << dest_name << "\n";
+        //  No use for this def.
+        if (!uses.contains(dest_name)) {
+          bb_it->data.erase(instr_it);
+        }
+      }
+    }
+  }
+}
+
 int main(int argc, char **argv) {
   nl::json ir;
   if (argc == 1)
@@ -712,6 +744,7 @@ int main(int argc, char **argv) {
     DomInfo dom = computeDomInfo(cfg);
     // dom.dump();
     Function ssa = convertToSSA(cfg, func, dom);
+    die(ssa);
 
     nl::json new_func = FunctionToJson(ssa);
     nl::json prog;
