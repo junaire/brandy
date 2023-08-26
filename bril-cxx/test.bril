@@ -1,0 +1,13 @@
+@main {
+  j: int = const 0;
+  hundred: int = const 100;
+  one: int = const 1;
+.loop_header:
+  cond: bool = lt j hundred;
+  br cond .body .ret;
+.body:
+  j: int = add j one;
+  jmp .loop_header;
+.ret:
+  print j;
+}

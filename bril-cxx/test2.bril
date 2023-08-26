@@ -1,0 +1,25 @@
+@main {
+  i: int = const 0;
+  j: int = const 0;
+  hundred: int = const 100;
+  ten: int = const 10;
+  one: int = const 1;
+  two: int = const 2;
+.loop_header:
+  cond: bool = lt j hundred;
+  br cond .body .ret;
+.body:
+  cond_i: bool = lt i ten;
+  br cond_i .true_br .false_br;
+.true_br:
+  i: int = add i one;
+  j: int = add j one;
+  jmp .end_br;
+.false_br:
+  i: int = add i two;
+  j: int = add j one;
+.end_br:
+  jmp .loop_header;
+.ret:
+  print j;
+}
