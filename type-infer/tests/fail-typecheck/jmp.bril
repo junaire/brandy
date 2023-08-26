@@ -1,9 +1,0 @@
-# RETURN: 1
-#
-@main {
-  v: int = const 4;
-  jmp .somewhere;
-  v: bool = const 2;
-.somewhere:
-  print v;
-}

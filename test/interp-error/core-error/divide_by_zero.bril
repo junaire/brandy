@@ -1,6 +1,0 @@
-@main {
-  v0: int = const -1;
-  zero: int = const 0;
-  res: int = div v0 zero;
-  print res;
-}

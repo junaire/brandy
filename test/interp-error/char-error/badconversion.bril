@@ -1,7 +1,0 @@
-@main {
-  i: int = const 56193;
-
-  c: char = int2char i;
-
-  print c;
-}

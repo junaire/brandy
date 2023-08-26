@@ -1,4 +1,0 @@
-@main(a: ptr<int>) {
-  b: ptr<int> = id a;
-  c: ptr<float> = id a;
-}

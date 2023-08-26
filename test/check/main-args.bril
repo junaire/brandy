@@ -1,6 +1,0 @@
-# ARGS: 1 2
-# RETURN: 0
-@main(x: int, y: int) {
-    v: int = add x y;
-    print v;
-}

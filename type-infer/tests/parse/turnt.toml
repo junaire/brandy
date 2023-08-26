@@ -1,2 +1,0 @@
-command = "bril2json < {filename}"
-output.json = "-"

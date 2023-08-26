@@ -1,2 +1,0 @@
-command = "bril2txt < {filename}"
-output.bril = "-"
