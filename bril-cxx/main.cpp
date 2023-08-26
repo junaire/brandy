@@ -459,6 +459,16 @@ static std::map<std::string, std::set<std::string>> getDefBlockMap(
   return out;
 }
 
+bool DomInfo::isDominate(const std::string &x, const std::string &y) {
+  // Same bb.
+  if (x == y) return true;
+
+  if (auto it = dom_tree.find(x); it != dom_tree.end()) {
+    return it->second.contains(y);
+  }
+  return false;
+}
+
 void DomInfo::dump() {
   auto print = [](const auto &dom) {
     for (const auto &[name, doms] : dom) {
@@ -727,6 +737,80 @@ void die(Function &func) {
   }
 }
 
+struct Identity {
+  std::string op;
+  std::vector<std::string> args;
+  Identity(std::string op, std::vector<std::string> args)
+      : op(std::move(op)), args(std::move(args)) {}
+
+  friend bool operator==(const Identity &lhs, const Identity &rhs) {
+    if (lhs.op != rhs.op) return false;
+    if (lhs.args.size() != rhs.args.size()) return false;
+    // +/* is commutative.
+    if (lhs.op == "+" || lhs.op == "*") {
+      return std::is_permutation(lhs.args.begin(), lhs.args.end(),
+                                 rhs.args.begin());
+    }
+    return lhs.args == rhs.args;
+  }
+};
+
+template <>
+struct std::hash<Identity> {
+  std::size_t operator()(const Identity &id) const {
+    std::size_t seed = 0;
+    std::hash<std::string> hasher;
+    seed ^= hasher(id.op) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+    for (const std::string &arg : id.args) {
+      seed ^= hasher(arg) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+    }
+    return seed;
+  }
+};
+
+void cse(Function &func, DomInfo &dom) {
+  std::unordered_map<Identity,
+                     std::vector<std::pair<Instruction *, std::string>>>
+      cand;
+  for (auto bb_it = func.basic_blocks.begin(); bb_it != func.basic_blocks.end();
+       bb_it++) {
+    for (auto instr_it = bb_it->data.begin(); instr_it != bb_it->data.end();
+         instr_it++) {
+      if (!instr_it->contains("op") || !instr_it->contains("args")) continue;
+
+      std::string op = (*instr_it)["op"].template get<std::string>();
+      std::vector<std::string> args;
+      for (const auto &arg : (*instr_it)["args"]) {
+        args.push_back(arg.template get<std::string>());
+      }
+      Identity ident(std::move(op), std::move(args));
+      cand[ident].push_back({&*instr_it, bb_it->name});
+    }
+  }
+
+  for (const auto &[ident, instrs] : cand) {
+    if (instrs.size() < 2) continue;
+
+    for (int i = 0; i < instrs.size(); ++i) {
+      for (int j = i + 1; j < instrs.size(); ++j) {
+        auto a = instrs[i];
+        auto b = instrs[j];
+        // if def(i) dominates def(j), replace j with i's dest
+        // if a and b are in the same BasicBlock, we guarantee that a executes
+        // before b.
+        if (dom.isDominate(a.second, b.second)) {
+          // std::cout << *a.first << "\n";
+          // std::cout << *b.first << "\n";
+          auto &instr = *b.first;
+          std::string a_name = (*a.first)["dest"].template get<std::string>();
+          instr["op"] = "id";
+          instr["args"] = {a_name};
+        }
+      }
+    }
+  }
+}
+
 int main(int argc, char **argv) {
   nl::json ir;
   if (argc == 1)
@@ -745,6 +829,7 @@ int main(int argc, char **argv) {
     // dom.dump();
     Function ssa = convertToSSA(cfg, func, dom);
     die(ssa);
+    cse(ssa, dom);
 
     nl::json new_func = FunctionToJson(ssa);
     nl::json prog;

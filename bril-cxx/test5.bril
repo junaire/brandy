@@ -1,0 +1,13 @@
+@main {
+  a: int = const 1;
+  b: int = const 2;
+  x: int = add a b;
+  cond: bool = lt a b;
+  br cond .true_body .ret;
+.true_body:
+  y: int = add a b;
+.ret:
+  z: int = add a b;
+  w: int = add z x;
+  print w;
+}

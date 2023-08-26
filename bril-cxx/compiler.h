@@ -56,6 +56,9 @@ struct DomInfo {
   std::map<std::string, std::set<std::string>> df;
   std::map<std::string, std::set<std::string>> dom_tree;
   void dump();
+
+  // Returns true if a dom b. if a == b.
+  bool isDominate(const std::string &x, const std::string &y);
 };
 
 DomInfo computeDomInfo(CFG &cfg);
@@ -64,6 +67,8 @@ using PhiMap = std::map<std::string, std::set<std::string>>;
 
 Function convertToSSA(CFG &cfg, Function function, DomInfo &dom);
 
-nl::json FunctionToJson(const Function& func);
+nl::json FunctionToJson(const Function &func);
 
-void die(Function& func);
+void die(Function &func);
+
+void cse(Function &func);
