@@ -680,6 +680,21 @@ Function convertToSSA(CFG &cfg, Function function, DomInfo &dom) {
   return ssa.convert();
 }
 
+nl::json FunctionToJson(const Function &func) {
+  nl::json out;
+  out["name"] = func.name;
+  for (const BasicBlock &bb : func.basic_blocks) {
+    nl::json label;
+    label["label"] = bb.name;
+    out["instrs"].push_back(std::move(label));
+
+    for (const Instruction &instr : bb.data) {
+      out["instrs"].push_back(std::move(instr));
+    }
+  }
+  return out;
+}
+
 int main(int argc, char **argv) {
   nl::json ir;
   if (argc == 1)
@@ -697,5 +712,10 @@ int main(int argc, char **argv) {
     DomInfo dom = computeDomInfo(cfg);
     // dom.dump();
     Function ssa = convertToSSA(cfg, func, dom);
+
+    nl::json new_func = FunctionToJson(ssa);
+    nl::json prog;
+    prog["functions"].push_back(new_func);
+    std::cout << prog << "\n";
   }
 }

@@ -63,3 +63,5 @@ DomInfo computeDomInfo(CFG &cfg);
 using PhiMap = std::map<std::string, std::set<std::string>>;
 
 Function convertToSSA(CFG &cfg, Function function, DomInfo &dom);
+
+nl::json FunctionToJson(const Function& func);
