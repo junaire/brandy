@@ -11,6 +11,8 @@
 
 #include "compiler.h"
 
+// ============ Instruction ================
+
 static std::optional<std::string> getOp(const Instruction &instr) {
   if (instr.contains("op")) {
     return instr["op"].template get<std::string>();
@@ -22,8 +24,6 @@ static bool isInstruction(const Instruction &instr) {
   return getOp(instr).has_value();
 }
 
-static constexpr std::string_view kTerminators[] = {"jmp", "br", "ret"};
-
 static bool isTerminator(const Instruction &instr) {
   std::optional<std::string> op = getOp(instr);
   if (!op) return false;
@@ -33,6 +33,8 @@ static bool isTerminator(const Instruction &instr) {
   return false;
 }
 
+// ============ BasicBlock ================
+
 static std::optional<Instruction> getTerminator(const BasicBlock &bb) {
   assert(!bb.data.empty());
   Instruction terminator = bb.data.back();
@@ -40,73 +42,23 @@ static std::optional<Instruction> getTerminator(const BasicBlock &bb) {
   return std::nullopt;
 }
 
-static void dumpBasicBlock(const BasicBlock &bb) {
-  std::cout << bb.name;
-  if (bb.name == "Entry" || bb.name == "Exit") {
+void BasicBlock::dump() const {
+  std::cout << name;
+  if (name == "Entry" || name == "Exit") {
     std::cout << "\n";
   } else {
     std::cout << " [";
-    for (const Instruction &instr : bb.data) {
+    for (const Instruction &instr : data) {
       std::cout << instr << ", ";
     }
     std::cout << "]\n";
   }
 }
 
-static void dumpFunction(const Function &function) {
-  std::cout << function.name << ":\n";
-  for (const BasicBlock &bb : function.basic_blocks) {
-    dumpBasicBlock(bb);
-  }
-}
-
-static void dumpCFG(const CFG &cfg) {
-  std::cout << "\n";
-  if (!cfg.successors.empty()) {
-    std::cout << "Successors:\n";
-    for (const auto &[name, succs] : cfg.successors) {
-      std::cout << name << ": ";
-      std::cout << "[";
-      for (const std::string &succ : succs) {
-        std::cout << succ << ", ";
-      }
-      std::cout << "]\n";
-    }
-  }
-  // if (!cfg.predecessors.empty()) {
-  //   std::cout << "Predecessors:\n";
-  //   for (const auto &[name, preds] : cfg.predecessors) {
-  //     std::cout << name << ": ";
-  //     std::cout << "[";
-  //     for (const std::string &pred : preds) {
-  //       std::cout << pred << ", ";
-  //     }
-  //     std::cout << "]\n";
-  //   }
-  // }
-}
-
-static void dumpCFGToDot(const CFG &cfg) {
-  std::string file = cfg.function.name + ".dot";
-  std::ofstream f(file);
-  f << "digraph " << cfg.function.name << " {\n";
-  f << "node [shape=box, style=filled]\n";
-  for (const auto &[name, bb] : cfg.function.basic_blocks) {
-    f << "\"" << name << "\"\n";
-  }
-  for (const auto &[name, succs] : cfg.successors) {
-    for (const std::string &succ : succs)
-      f << "\"" << name << "\"-> \"" << succ << "\"[color=\"blue\"]\n";
-  }
-  // for (const auto &[name, preds] : cfg.predecessors) {
-  //   for (const std::string &pred : preds)
-  //     f << "\"" << name << "\"-> \"" << pred << "\"[color=\"red\"]\n";
-  // }
-  f << "}";
-}
+// ============ Function ================
 
 static std::string createBBName() {
-  static int i = 0;
+  static int i = 1;
   return "bb." + std::to_string(i++);
 }
 
@@ -157,6 +109,15 @@ Function buildFunction(const nl::json &function) {
 
   return program;
 }
+
+void Function::dump() const {
+  std::cout << name << ":\n";
+  for (const BasicBlock &bb : basic_blocks) {
+    bb.dump();
+  }
+}
+
+// ============ CFG ================
 
 CFG buildCFG(Function &function) {
   CFG cfg = {.function = function};
@@ -216,6 +177,53 @@ CFG buildCFG(Function &function) {
 
   return cfg;
 }
+
+void CFG::dump() const {
+  std::cout << "\n";
+  if (!successors.empty()) {
+    std::cout << "Successors:\n";
+    for (const auto &[name, succs] : successors) {
+      std::cout << name << ": ";
+      std::cout << "[";
+      for (const std::string &succ : succs) {
+        std::cout << succ << ", ";
+      }
+      std::cout << "]\n";
+    }
+  }
+  // if (!cfg.predecessors.empty()) {
+  //   std::cout << "Predecessors:\n";
+  //   for (const auto &[name, preds] : cfg.predecessors) {
+  //     std::cout << name << ": ";
+  //     std::cout << "[";
+  //     for (const std::string &pred : preds) {
+  //       std::cout << pred << ", ";
+  //     }
+  //     std::cout << "]\n";
+  //   }
+  // }
+}
+
+void CFG::dumpDot() const {
+  std::string file = function.name + ".dot";
+  std::ofstream f(file);
+  f << "digraph " << function.name << " {\n";
+  f << "node [shape=box, style=filled]\n";
+  for (const auto &[name, bb] : function.basic_blocks) {
+    f << "\"" << name << "\"\n";
+  }
+  for (const auto &[name, succs] : successors) {
+    for (const std::string &succ : succs)
+      f << "\"" << name << "\"-> \"" << succ << "\"[color=\"blue\"]\n";
+  }
+  // for (const auto &[name, preds] : cfg.predecessors) {
+  //   for (const std::string &pred : preds)
+  //     f << "\"" << name << "\"-> \"" << pred << "\"[color=\"red\"]\n";
+  // }
+  f << "}";
+}
+
+// ============ Dom ================
 
 static void build(CFG &cfg, std::vector<std::string> &postorder,
                   std::set<std::string> &visited, const std::string &root) {
@@ -400,31 +408,6 @@ static void computeDomFrontier(DomInfo &dom_info, CFG &cfg) {
   }
 }
 
-static void dumpDom(const DomInfo &dom_info) {
-  auto print = [](const auto &dom) {
-    for (const auto &[name, doms] : dom) {
-      std::cout << name << ": [";
-      for (const std::string &d : doms) {
-        std::cout << d << ", ";
-      }
-      std::cout << "]\n";
-    }
-  };
-
-  std::cout << "dom:\n";
-  print(dom_info.dom);
-
-  std::cout << "idom:\n";
-  for (const auto &[name, idom] : dom_info.idom) {
-    std::cout << name << ": [";
-    if (!idom.empty()) std::cout << idom;
-    std::cout << "]\n";
-  }
-
-  std::cout << "dominator frontier:\n";
-  print(dom_info.df);
-}
-
 static void computeDomTree(CFG &cfg, DomInfo &dom_info) {
   DomRelation strict = invert(dom_info.dom);
   for (auto &[a, b] : strict) {
@@ -474,7 +457,33 @@ static std::map<std::string, std::set<std::string>> getDefBlockMap(
   return out;
 }
 
-using PhiMap = std::map<std::string, std::set<std::string>>;
+void DomInfo::dump() {
+  auto print = [](const auto &dom) {
+    for (const auto &[name, doms] : dom) {
+      std::cout << name << ": [";
+      for (const std::string &d : doms) {
+        std::cout << d << ", ";
+      }
+      std::cout << "]\n";
+    }
+  };
+
+  std::cout << "dom:\n";
+  print(dom);
+
+  std::cout << "idom:\n";
+  for (const auto &[name, idom] : idom) {
+    std::cout << name << ": [";
+    if (!idom.empty()) std::cout << idom;
+    std::cout << "]\n";
+  }
+
+  std::cout << "dominator frontier:\n";
+  print(df);
+}
+
+// ============ SSA ================
+
 // Block name <=> variable name
 static PhiMap getPhis(Function &function, DomInfo &dom_info) {
   auto defs = getDefBlockMap(function);

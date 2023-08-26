@@ -12,6 +12,8 @@ namespace nl = nlohmann;
 
 using Instruction = nl::json;
 
+inline constexpr std::string_view kTerminators[] = {"jmp", "br", "ret"};
+
 struct BasicBlock {
   std::string name;
   std::deque<Instruction> data;
@@ -23,18 +25,23 @@ struct BasicBlock {
   bool isEntry() const { return name == "Entry"; }
 
   bool isExit() const { return name == "Exit"; }
+
+  void dump() const;
 };
 
 struct Function {
   std::string name;
   std::set<std::string> args;
   std::vector<BasicBlock> basic_blocks;
+  void dump() const;
 };
 
 struct CFG {
   Function function;
   std::map<std::string, std::vector<std::string>> predecessors;
   std::map<std::string, std::vector<std::string>> successors;
+  void dump() const;
+  void dumpDot() const;
 };
 
 Function buildFunction(const nl::json &function);
@@ -48,8 +55,12 @@ struct DomInfo {
   std::map<std::string, std::string> idom;
   std::map<std::string, std::set<std::string>> df;
   std::map<std::string, std::set<std::string>> dom_tree;
+  void dump();
 };
 
 DomInfo computeDomInfo(CFG &cfg);
 
-Function convertToSSA(CFG& cfg, Function function, DomInfo& dom);
+using PhiMap = std::map<std::string, std::set<std::string>>;
+
+Function convertToSSA(CFG &cfg, Function function, DomInfo &dom);
+
