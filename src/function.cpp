@@ -4,6 +4,7 @@
 
 #include "basic_block.h"
 #include "context.h"
+#include "instruction.h"
 
 static std::optional<std::string> getOp(const nl::json &instr) {
   if (instr.contains("op")) {
@@ -116,4 +117,18 @@ nl::json Function::ToJson() {
     }
   }
   return out;
+}
+Instruction *Function::GetInstrByName(const std::string &name) {
+  // Lazily populate the container.
+  if (all_instrs.empty()) {
+    for (BasicBlock *bb : basic_blocks) {
+      for (Instruction *instr : bb->instrs) {
+        if (!instr->hasDest()) continue;
+        all_instrs[instr->GetDest()] = instr;
+      }
+    }
+  }
+  auto it = all_instrs.find(name);
+  assert(it != all_instrs.end());
+  return it->second;
 }

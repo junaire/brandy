@@ -3,10 +3,12 @@
 #include <fstream>
 #include <iostream>
 
+#include "basic_block.h"
 #include "cfg.h"
 #include "context.h"
 #include "dom.h"
 #include "function.h"
+#include "instruction.h"
 #include "ssa.h"
 #include "transform.h"
 

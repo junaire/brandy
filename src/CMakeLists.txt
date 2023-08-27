@@ -7,6 +7,7 @@ SET(SOURCES
   context.cpp
   die.cpp
   cse.cpp
+  copy_prop.cpp
   main.cpp
 )
 
