@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>Brandy</code></h1>
+  <h1>🐱 Brandy</code></h1>
 
   <p>
     <strong>C++ implementation of Bril compiler</strong>
