@@ -139,3 +139,4 @@ struct SSAConverter {
 void ToSSA(Context *ctx, Function &function, CFG &cfg, DomInfo &dom) {
   SSAConverter converter(ctx, cfg, function, dom);
   converter.ToSSA();
+}
